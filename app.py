@@ -23,10 +23,10 @@ embeddings = HuggingFaceEmbeddings(
 # -----------------------------
 # Vector DB
 db_directory = "./chroma_db_AI_Regulation"
-vector_db = Chroma(
-    persist_directory=db_directory,
-    embedding_function=embeddings
-)
+# vector_db = Chroma(
+#   persist_directory=db_directory,
+#    embedding_function=embeddings
+# )
 
 # -----------------------------
 # LLM
@@ -59,15 +59,27 @@ system_instruction = """أنت "ونيس"، الصديق الأكاديمي ال
 
 # -----------------------------
 # دالة ونيس
-def ask_wanis(question):
-    results = vector_db.similarity_search(question, k=3)
-    context = "\n\n---\n\n".join([doc.page_content for doc in results])
+# def ask_wanis(question):
+#   results = vector_db.similarity_search(question, k=3)
+#    context = "\n\n---\n\n".join([doc.page_content for doc in results])
 
-    user_prompt = f"السياق:\n{context}\n\nسؤال الطالب: {question}"
+#    user_prompt = f"السياق:\n{context}\n\nسؤال الطالب: {question}"
+
+#    response = llm.invoke([
+#        SystemMessage(content=system_instruction),
+#        HumanMessage(content=user_prompt)
+#    ])
+
+#    return response.content
+
+
+def ask_wanis(question):
+
+    context = "temporary test"
 
     response = llm.invoke([
         SystemMessage(content=system_instruction),
-        HumanMessage(content=user_prompt)
+        HumanMessage(content=question)
     ])
 
     return response.content

@@ -15,8 +15,13 @@ os.environ["OPENROUTER_API_KEY"] = "sk-or-v1-ca7f343d144615e4c024a848bc8976ebbd9
 
 # -----------------------------
 # Embeddings (CPU عشان السيرفر)
+# embeddings = HuggingFaceEmbeddings(
+#   model_name="BAAI/bge-m3",
+#    model_kwargs={'device': 'cpu'}
+# )
+
 embeddings = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-m3",
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
     model_kwargs={'device': 'cpu'}
 )
 

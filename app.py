@@ -78,9 +78,28 @@ system_instruction = """أنت "ونيس"، الصديق الأكاديمي ال
 #    return response.content
 
 
-def ask_wanis(question):
+# def ask_wanis(question):
+#
+#   context = "temporary test"
+#
+#    response = llm.invoke([
+#        SystemMessage(content=system_instruction),
+#        HumanMessage(content=question)
+#    ])
 
-    context = "temporary test"
+#    return response.content
+
+
+
+def ask_wanis(question):
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
+
+    vector_db = Chroma(
+        persist_directory="./chroma_db_AI_Regulation",
+        embedding_function=embeddings
+    )
 
     response = llm.invoke([
         SystemMessage(content=system_instruction),

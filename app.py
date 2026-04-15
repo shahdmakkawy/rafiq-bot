@@ -14,24 +14,24 @@ app = FastAPI()
 os.environ["OPENROUTER_API_KEY"] = "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"
 
 # -----------------------------
-# Embeddings (CPU عشان السيرفر)
-# embeddings = HuggingFaceEmbeddings(
-#   model_name="BAAI/bge-m3",
-#    model_kwargs={'device': 'cpu'}
-# )
 
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
+# Embeddings (CPU عشان السيرفر)
+
+embeddings = HuggingFaceEmbeddings( 
+     model_name="BAAI/bge-m3",
     model_kwargs={'device': 'cpu'}
 )
+
+
+
 
 # -----------------------------
 # Vector DB
 db_directory = "./chroma_db_AI_Regulation"
-# vector_db = Chroma(
-#   persist_directory=db_directory,
-#    embedding_function=embeddings
-# )
+vector_db = Chroma(
+    persist_directory=db_directory,
+    embedding_function=embeddings,
+)
 
 # -----------------------------
 # LLM
@@ -64,46 +64,15 @@ system_instruction = """أنت "ونيس"، الصديق الأكاديمي ال
 
 # -----------------------------
 # دالة ونيس
-# def ask_wanis(question):
-#   results = vector_db.similarity_search(question, k=3)
-#    context = "\n\n---\n\n".join([doc.page_content for doc in results])
-
-#    user_prompt = f"السياق:\n{context}\n\nسؤال الطالب: {question}"
-
-#    response = llm.invoke([
-#        SystemMessage(content=system_instruction),
-#        HumanMessage(content=user_prompt)
-#    ])
-
-#    return response.content
-
-
-# def ask_wanis(question):
-#
-#   context = "temporary test"
-#
-#    response = llm.invoke([
-#        SystemMessage(content=system_instruction),
-#        HumanMessage(content=question)
-#    ])
-
-#    return response.content
-
-
-
 def ask_wanis(question):
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    results = vector_db.similarity_search(question, k=3)
+    context = "\n\n---\n\n".join([doc.page_content for doc in results])
 
-    vector_db = Chroma(
-        persist_directory="./chroma_db_AI_Regulation",
-        embedding_function=embeddings
-    )
+    user_prompt = f"السياق:\n{context}\n\nسؤال الطالب: {question}"
 
     response = llm.invoke([
         SystemMessage(content=system_instruction),
-        HumanMessage(content=question)
+        HumanMessage(content=user_prompt)
     ])
 
     return response.content

@@ -22,9 +22,6 @@ embeddings = HuggingFaceEmbeddings(
     model_kwargs={'device': 'cpu'}
 )
 
-
-
-
 # -----------------------------
 # Vector DB
 db_directory = "./chroma_db_AI_Regulation"

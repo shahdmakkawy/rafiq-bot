@@ -1,53 +1,33 @@
 import os
-import json
-import requests
 from dotenv import load_dotenv
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
+import requests
+import json
 
 load_dotenv()
+
+# 1. إعداد الـ Embeddings (موديل البحث)
+# استخدمنا موديل صغير عشان ريندر يقدر يحمله في الرامات
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+# 2. مسار قاعدة البيانات (عدلي الاسم الطويل ده لو اتغير عندك)
+# ده المسار اللي ظهر في صورك لملفات الـ .bin والـ sqlite
+db_path = os.path.join(os.path.dirname(__file__), "chroma_db_AI_Regulation", "9ead610c-ae4d-48e5-804f-317cd0405251")
+
+# تحميل قاعدة البيانات
+vector_db = Chroma(persist_directory=db_path, embedding_function=embeddings)
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 MODEL_NAME = "google/gemini-2.0-flash-001"
 
 def ask_wanis(question: str):
     try:
-        json_path = os.path.join(os.path.dirname(__file__), "final_regulation_final_clean.json")
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        # البحث في الكروما عن أكتر 5 فقرات دقيقة
+        docs = vector_db.similarity_search(question, k=5)
+        context = "\n\n".join([doc.page_content for doc in docs])
         
-        # أهم خطوة: تحويل الـ JSON لنص منظم بجد يفهمه الذكاء الاصطناعي
-        def dict_to_text(d, indent=0):
-            text = ""
-            if isinstance(d, dict):
-                for k, v in d.items():
-                    text += "  " * indent + str(k) + ": " + dict_to_text(v, indent + 1) + "\n"
-            elif isinstance(d, list):
-                for item in d:
-                    text += dict_to_text(item, indent + 1)
-            else:
-                text += str(d) + " "
-            return text
-
-        full_regulation_text = dict_to_text(data)
-
-        # البحث عن السياق المناسب (هناخد جزء كبير عشان نضمن الجداول)
-        context = ""
-        keywords = ["رابعة", "ثالثة", "ثانية", "أولى", "مشروع", "ساعات", "نجاح"]
-        
-        found = False
-        for kw in keywords:
-            if kw in question:
-                index = full_regulation_text.find(kw)
-                if index != -1:
-                    # بناخد 20 ألف حرف (مساحة عملاقة Gemini Flash يقدر يشيلها)
-                    start = max(0, index - 2000)
-                    end = min(len(full_regulation_text), index + 18000)
-                    context = full_regulation_text[start:end]
-                    found = True
-                    break
-        
-        if not found:
-            context = full_regulation_text[:20000]
-
+        # إرسال السياق لـ Gemini
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -57,23 +37,15 @@ def ask_wanis(question: str):
             data=json.dumps({
                 "model": MODEL_NAME,
                 "messages": [
-                    {
-                        "role": "system", 
-                        "content": "أنت 'ونيس' الخبير في لائحة كلية الحاسبات جامعة المنصورة. "
-                                   "أمامك نص منظم جداً للائحة. "
-                                   "عندما يطلب الطالب مواد سنة معينة، ابحث في الجداول المرفقة واذكر أسماء المواد وعدد ساعاتها بالتفصيل. "
-                                   "رد بأسلوب ودي كصديق."
-                    },
-                    {"role": "user", "content": f"اللائحة المنظمة:\n{context}\n\nالسؤال: {question}"}
+                    {"role": "system", "content": "أنت 'ونيس' الخبير الأكاديمي. استخدم السياق المرفق من اللائحة للرد بدقة كاملة."},
+                    {"role": "user", "content": f"السياق: {context}\n\nالسؤال: {question}"}
                 ],
-                "temperature": 0.2
+                "temperature": 0.1
             })
         )
         return response.json()['choices'][0]['message']['content']
-
     except Exception as e:
-        return f"حصل خطأ فني: {str(e)}"
-
+        return f"حصل خطأ في البحث: {str(e)}"
 
 
 

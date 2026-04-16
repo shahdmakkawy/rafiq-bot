@@ -1,3 +1,55 @@
+import os
+from dotenv import load_dotenv
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
+import requests
+import json
+
+load_dotenv()
+
+# 1. إعداد الـ Embeddings (موديل البحث) - هنستخدم موديل أصغر شوية عشان Render
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+# 2. تحميل قاعدة البيانات (تأكدي إن فولدر chroma_db_AI_Regulation مرفوع على GitHub)
+db_directory = os.path.join(os.path.dirname(__file__), "chroma_db_AI_Regulation")
+vector_db = Chroma(persist_directory=db_directory, embedding_function=embeddings)
+
+API_KEY = os.getenv("OPENROUTER_API_KEY")
+MODEL_NAME = "google/gemini-2.0-flash-001"
+
+def ask_wanis(question: str):
+    try:
+        # البحث في اللائحة كلها (دي أهم حتة إنتي عايزياها)
+        results = vector_db.similarity_search(question, k=3)
+        context = "\n\n".join([doc.page_content for doc in results])
+        
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json",
+            },
+            data=json.dumps({
+                "model": MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": "أنت 'ونيس'، صديق أكاديمي لطلاب جامعة المنصورة. استخدم السياق التالي فقط للرد بدقة من اللائحة."},
+                    {"role": "user", "content": f"السياق: {context}\n\nالسؤال: {question}"}
+                ]
+            })
+        )
+        result = response.json()
+        return result['choices'][0]['message']['content']
+    except Exception as e:
+        return f"حصل خطأ: {str(e)}"
+
+
+
+
+
+
+
+
+"""
 import requests
 import json
 import os
@@ -49,10 +101,7 @@ def ask_wanis(question: str):
         return f"حصل خطأ بسيط يا بطل: {str(e)}"
 
 
-
-
-
-"""
+-------------------------------------
 import requests
 import json
 import os

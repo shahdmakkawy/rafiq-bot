@@ -1,4 +1,17 @@
-﻿aiohappyeyeballs==2.6.1
+fastapi
+uvicorn
+pydantic
+requests
+python-dotenv
+
+
+
+
+
+
+
+"""
+aiohappyeyeballs==2.6.1
 aiohttp==3.13.5
 aiosignal==1.4.0
 annotated-doc==0.0.4
@@ -125,3 +138,4 @@ xxhash==3.6.0
 yarl==1.23.0
 zipp==3.23.1
 zstandard==0.25.0
+"""

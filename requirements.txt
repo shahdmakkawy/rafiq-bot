@@ -2,12 +2,3 @@ fastapi
 uvicorn
 requests
 python-dotenv
-
-
-"""
-fastapi
-uvicorn
-pydantic
-requests
-python-dotenv
-"""

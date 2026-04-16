@@ -28,7 +28,7 @@ def ask_wanis(question: str):
             data=json.dumps({
                 "model": "google/gemini-2.0-flash-001",
                 "messages": [
-                    {"role": "system", "content": "أنت 'ونيس' مساعد طلاب حاسبات المنصورة. استخدم اللائحة المرفقة للرد بدقة."},
+                    {"role": "system", "content": "أنت 'رفيق' مساعد طلاب حاسبات المنصورة. استخدم اللائحة المرفقة للرد بدقة."},
                     {"role": "user", "content": f"اللائحة: {context}\n\nالسؤال: {question}"}
                 ],
                 "temperature": 0.3

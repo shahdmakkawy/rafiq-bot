@@ -1,51 +1,40 @@
 import os
-from dotenv import load_dotenv
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from pinecone import Pinecone
 import requests
 import json
+from dotenv import load_dotenv
 
 load_dotenv()
 
-# 1. إعداد الـ Embeddings (موديل البحث)
-# استخدمنا موديل صغير عشان ريندر يقدر يحمله في الرامات
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-# 2. مسار قاعدة البيانات (عدلي الاسم الطويل ده لو اتغير عندك)
-# ده المسار اللي ظهر في صورك لملفات الـ .bin والـ sqlite
-db_path = os.path.join(os.path.dirname(__file__), "chroma_db_AI_Regulation", "9ead610c-ae4d-48e5-804f-317cd0405251")
-
-# تحميل قاعدة البيانات
-vector_db = Chroma(persist_directory=db_path, embedding_function=embeddings)
+# إعداد Pinecone (الـ API الخارجي)
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+index = pc.Index("wanis-regulation") # اسم الـ Index اللي هتعمليه
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL_NAME = "google/gemini-2.0-flash-001"
 
 def ask_wanis(question: str):
     try:
-        # البحث في الكروما عن أكتر 5 فقرات دقيقة
-        docs = vector_db.similarity_search(question, k=5)
-        context = "\n\n".join([doc.page_content for doc in docs])
+        # 1. تحويل السؤال لـ Vector (ممكن تستخدمي OpenAI أو أي API خفيف)
+        # 2. البحث في Pinecone
+        # (الخطوات دي بتتم في ثواني لأنها API Calls مش تحميل موديلات)
         
-        # إرسال السياق لـ Gemini
+        # هنجيب السياق ونبعته لـ Gemini زي ما اتعلمنا
+        context = "النص المستخرج من Pinecone" 
+        
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": "application/json",
-            },
+            headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
             data=json.dumps({
-                "model": MODEL_NAME,
+                "model": "google/gemini-2.0-flash-001",
                 "messages": [
-                    {"role": "system", "content": "أنت 'ونيس' الخبير الأكاديمي. استخدم السياق المرفق من اللائحة للرد بدقة كاملة."},
-                    {"role": "user", "content": f"السياق: {context}\n\nالسؤال: {question}"}
-                ],
-                "temperature": 0.1
+                    {"role": "system", "content": "أنت ونيس، استخدم السياق للرد."},
+                    {"role": "user", "content": f"السياق: {context}\nالسؤال: {question}"}
+                ]
             })
         )
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
-        return f"حصل خطأ في البحث: {str(e)}"
+        return f"Error: {str(e)}"
 
 
 

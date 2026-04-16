@@ -6,37 +6,37 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# اتصال بـ Pinecone الخارجي (الذكاء كله هنا)
+# الاتصال بـ Pinecone
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index = pc.Index("wanis-regulation") # تأكدي إن ده اسم الـ Index في Pinecone
-
-API_KEY = os.getenv("OPENROUTER_API_KEY")
+index = pc.Index("wanis-index")
 
 def ask_wanis(question: str):
     try:
-        # 1. تحويل السؤال لـ Vector (ممكن تستخدمي Gemini نفسه أو OpenAI)
-        # 2. البحث في Pinecone (API Call خفيف جداً)
+        # 1. بنجمع الـ 8 قطع اللي رفعناهم
+        context = ""
+        for i in range(8):
+            result = index.fetch(ids=[f"reg_part_{i}"])
+            context += result['vectors'][f"reg_part_{i}"]['metadata']['text']
         
-        # لنفترض إنك رفعتِ النصوص، هنجيب السياق
-        # ملاحظة: دي الخطوة اللي بنجيب فيها المعلومات من Pinecone
-        query_res = index.query(vector=[0.1]*1536, top_k=5, include_metadata=True) # مثال مبسط
-        context = "\n".join([item['metadata']['text'] for item in query_res['matches']])
-
-        # 3. بعت السياق لـ Gemini
+        # 2. نبعت السياق لـ Gemini
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
-            headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                "Content-Type": "application/json"
+            },
             data=json.dumps({
                 "model": "google/gemini-2.0-flash-001",
                 "messages": [
-                    {"role": "system", "content": "أنت 'ونيس'. استخدم السياق المرفق من Pinecone للرد بدقة."},
-                    {"role": "user", "content": f"السياق: {context}\n\nالسؤال: {question}"}
-                ]
+                    {"role": "system", "content": "أنت 'ونيس' مساعد طلاب حاسبات المنصورة. استخدم اللائحة المرفقة للرد بدقة."},
+                    {"role": "user", "content": f"اللائحة: {context}\n\nالسؤال: {question}"}
+                ],
+                "temperature": 0.3
             })
         )
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
-        return f"خطأ في الـ API الخارجي: {str(e)}"
+        return f"حصل خطأ بسيط: {str(e)}"
 
 
 

@@ -1,39 +1,40 @@
-import requests
-import json
 import os
+import json
+import requests
 from dotenv import load_dotenv
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 load_dotenv()
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 MODEL_NAME = "google/gemini-2.0-flash-001"
 
+# 1. تحميل اللائحة وتقسيمها لفقرات ذكية
+json_path = os.path.join(os.path.dirname(__file__), "final_regulation_final_clean.json")
+with open(json_path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+    # هنحول الـ JSON لنصوص مقسمة (Chunks)
+    raw_text = json.dumps(data, ensure_ascii=False)
+    # تقسيم النص لفقرات كل فقرة حوالي 1000 حرف عشان البحث يبقى دقيق
+    chunks = [raw_text[i:i+1000] for i in range(0, len(raw_text), 800)]
+
+# 2. إعداد محرك البحث (Vectorization) - ده بيحصل مرة واحدة بس
+vectorizer = TfidfVectorizer()
+tfidf_matrix = vectorizer.fit_transform(chunks)
+
 def ask_wanis(question: str):
     try:
-        # 1. قراءة اللائحة كاملة
-        json_path = os.path.join(os.path.dirname(__file__), "final_regulation_final_clean.json")
-        with open(json_path, "r", encoding="utf-8") as f:
-            full_data = json.load(f)
+        # 3. البحث عن "أشبه" الفقرات بسؤال الطالب
+        query_vec = vectorizer.transform([question])
+        similarity = cosine_similarity(query_vec, tfidf_matrix).flatten()
+        
+        # اختيار أفضل 5 فقرات ليها علاقة بالسؤال
+        related_indices = similarity.argsort()[-5:][::-1]
+        context = "\n\n".join([chunks[i] for i in related_indices])
 
-        # 2. تحويل اللائحة لنصوص (فقرات) للبحث فيها
-        # هنفترض إن اللائحة عبارة عن قائمة أو قاموس كبير
-        content_text = json.dumps(full_data, ensure_ascii=False)
-        
-        # 3. بحث ذكي بالكلمات المفتاحية (Keyword Search)
-        # بدل ما نبعت أول الملف، هندور على الكلمات اللي الطالب سأل عنها
-        keywords = question.split()
-        relevant_chunks = []
-        
-        # تقسيم النص لقطع (Chunks) والبحث عن الكلمات المفتاحية
-        chunks = [content_text[i:i+3000] for i in range(0, len(content_text), 2000)]
-        for chunk in chunks:
-            if any(key in chunk for key in keywords):
-                relevant_chunks.append(chunk)
-        
-        # لو ملاقاش كلمات مفتاحية، ياخد أول جزء كاحتياطي
-        context = "\n".join(relevant_chunks[:4]) if relevant_chunks else content_text[:8000]
-
-        # 4. إرسال السياق "المحدد" لـ Gemini
+        # 4. إرسال الإجابة لـ Gemini
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -43,13 +44,12 @@ def ask_wanis(question: str):
             data=json.dumps({
                 "model": MODEL_NAME,
                 "messages": [
-                    {"role": "system", "content": "أنت 'ونيس'، صديق طلاب حاسبات المنصورة. استخدم المعلومات المرفقة فقط للإجابة بدقة."},
+                    {"role": "system", "content": "أنت 'ونيس' المساعد الأكاديمي لطلاب حاسبات المنصورة. استخدم السياق المرفق فقط للإجابة بدقة وود."},
                     {"role": "user", "content": f"السياق من اللائحة: {context}\n\nالسؤال: {question}"}
                 ]
             })
         )
-        result = response.json()
-        return result['choices'][0]['message']['content']
+        return response.json()['choices'][0]['message']['content']
 
     except Exception as e:
         return f"حصل خطأ: {str(e)}"

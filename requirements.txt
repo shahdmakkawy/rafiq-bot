@@ -2,5 +2,6 @@ fastapi
 uvicorn
 requests
 python-dotenv
-scikit-learn
-numpy
+langchain-huggingface
+langchain-community
+chromadb==0.4.15

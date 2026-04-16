@@ -2,39 +2,41 @@ import os
 import json
 import requests
 from dotenv import load_dotenv
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
 
 load_dotenv()
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 MODEL_NAME = "google/gemini-2.0-flash-001"
 
-# 1. تحميل اللائحة وتقسيمها لفقرات ذكية
-json_path = os.path.join(os.path.dirname(__file__), "final_regulation_final_clean.json")
-with open(json_path, "r", encoding="utf-8") as f:
-    data = json.load(f)
-    # هنحول الـ JSON لنصوص مقسمة (Chunks)
-    raw_text = json.dumps(data, ensure_ascii=False)
-    # تقسيم النص لفقرات كل فقرة حوالي 1000 حرف عشان البحث يبقى دقيق
-    chunks = [raw_text[i:i+1000] for i in range(0, len(raw_text), 800)]
-
-# 2. إعداد محرك البحث (Vectorization) - ده بيحصل مرة واحدة بس
-vectorizer = TfidfVectorizer()
-tfidf_matrix = vectorizer.fit_transform(chunks)
-
 def ask_wanis(question: str):
     try:
-        # 3. البحث عن "أشبه" الفقرات بسؤال الطالب
-        query_vec = vectorizer.transform([question])
-        similarity = cosine_similarity(query_vec, tfidf_matrix).flatten()
+        # 1. قراءة اللائحة
+        json_path = os.path.join(os.path.dirname(__file__), "final_regulation_final_clean.json")
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
         
-        # اختيار أفضل 5 فقرات ليها علاقة بالسؤال
-        related_indices = similarity.argsort()[-5:][::-1]
-        context = "\n\n".join([chunks[i] for i in related_indices])
+        full_text = json.dumps(data, ensure_ascii=False)
+        
+        # 2. البحث الذكي المتطور
+        # قائمة شاملة جداً تغطي أغلب الاهتمامات
+        search_terms = ["رابعة", "ثالثة", "ثانية", "أولى", "إعدادي", "مواد", "تحويل", "تنسيق", "نجاح", "رسوب", "رأفة", "صيفي", "ساعات", "إنذار", "مشروع"]
+        
+        context = ""
+        # لو السؤال فيه أي كلمة من القائمة، بنروح لمكانها ونآخد نص كبير حواليها
+        for term in search_terms:
+            if term in question:
+                index = full_text.find(term)
+                if index != -1:
+                    start = max(0, index - 3000)
+                    end = min(len(full_text), index + 12000)
+                    context = full_text[start:end]
+                    break
+        
+        # 3. الأمان: لو ملقاش أي كلمة، ابعت أول 15 ألف حرف (فيها الخلاصة والقواعد العامة)
+        if not context:
+            context = full_text[:15000]
 
-        # 4. إرسال الإجابة لـ Gemini
+        # 4. الطلب لـ Gemini
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -44,16 +46,22 @@ def ask_wanis(question: str):
             data=json.dumps({
                 "model": MODEL_NAME,
                 "messages": [
-                    {"role": "system", "content": "أنت 'ونيس' المساعد الأكاديمي لطلاب حاسبات المنصورة. استخدم السياق المرفق فقط للإجابة بدقة وود."},
-                    {"role": "user", "content": f"السياق من اللائحة: {context}\n\nالسؤال: {question}"}
-                ]
+                    {
+                        "role": "system", 
+                        "content": "أنت 'ونيس' المساعد الأكاديمي الذكي لطلاب حاسبات المنصورة. "
+                                   "لديك جزء من اللائحة، استخرج منه الإجابة بدقة. "
+                                   "إذا لم تجد المعلومة صراحة، حاول الاستنتاج من القواعد العامة المتاحة، "
+                                   "وإذا تأكدت من عدم وجودها، وجه الطالب للمكان الصحيح (شؤون الطلاب أو الموقع الرسمي)."
+                    },
+                    {"role": "user", "content": f"نص من اللائحة: {context}\n\nسؤال الطالب: {question}"}
+                ],
+                "temperature": 0.4 
             })
         )
         return response.json()['choices'][0]['message']['content']
 
     except Exception as e:
-        return f"حصل خطأ: {str(e)}"
-
+        return f"حصل خطأ يا هندسة: {str(e)}"
 
 
 

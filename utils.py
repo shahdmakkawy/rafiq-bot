@@ -6,36 +6,37 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# إعداد Pinecone (الـ API الخارجي)
+# اتصال بـ Pinecone الخارجي (الذكاء كله هنا)
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index = pc.Index("wanis-regulation") # اسم الـ Index اللي هتعمليه
+index = pc.Index("wanis-regulation") # تأكدي إن ده اسم الـ Index في Pinecone
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 def ask_wanis(question: str):
     try:
-        # 1. تحويل السؤال لـ Vector (ممكن تستخدمي OpenAI أو أي API خفيف)
-        # 2. البحث في Pinecone
-        # (الخطوات دي بتتم في ثواني لأنها API Calls مش تحميل موديلات)
+        # 1. تحويل السؤال لـ Vector (ممكن تستخدمي Gemini نفسه أو OpenAI)
+        # 2. البحث في Pinecone (API Call خفيف جداً)
         
-        # هنجيب السياق ونبعته لـ Gemini زي ما اتعلمنا
-        context = "النص المستخرج من Pinecone" 
-        
+        # لنفترض إنك رفعتِ النصوص، هنجيب السياق
+        # ملاحظة: دي الخطوة اللي بنجيب فيها المعلومات من Pinecone
+        query_res = index.query(vector=[0.1]*1536, top_k=5, include_metadata=True) # مثال مبسط
+        context = "\n".join([item['metadata']['text'] for item in query_res['matches']])
+
+        # 3. بعت السياق لـ Gemini
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
             data=json.dumps({
                 "model": "google/gemini-2.0-flash-001",
                 "messages": [
-                    {"role": "system", "content": "أنت ونيس، استخدم السياق للرد."},
-                    {"role": "user", "content": f"السياق: {context}\nالسؤال: {question}"}
+                    {"role": "system", "content": "أنت 'ونيس'. استخدم السياق المرفق من Pinecone للرد بدقة."},
+                    {"role": "user", "content": f"السياق: {context}\n\nالسؤال: {question}"}
                 ]
             })
         )
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
-        return f"Error: {str(e)}"
-
+        return f"خطأ في الـ API الخارجي: {str(e)}"
 
 
 

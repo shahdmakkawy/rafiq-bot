@@ -11,7 +11,9 @@ load_dotenv()
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 # 2. تحميل قاعدة البيانات (تأكدي إن فولدر chroma_db_AI_Regulation مرفوع على GitHub)
-db_directory = os.path.join(os.path.dirname(__file__), "chroma_db_AI_Regulation")
+# db_directory = os.path.join(os.path.dirname(__file__), "chroma_db_AI_Regulation")
+# التعديل ده عشان يقرأ من الفولدر الفرعي اللي ظاهر في الصورة
+db_directory = os.path.join(os.path.dirname(__file__), "chroma_db_AI_Regulation", "9ead610c-ae4d-48e5-804f-317cd0405251")
 vector_db = Chroma(persist_directory=db_directory, embedding_function=embeddings)
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")

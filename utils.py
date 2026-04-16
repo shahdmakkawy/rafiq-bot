@@ -1,30 +1,39 @@
-import os
-from dotenv import load_dotenv
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
 import requests
 import json
+import os
+from dotenv import load_dotenv
 
 load_dotenv()
-
-# 1. إعداد الـ Embeddings (موديل البحث) - هنستخدم موديل أصغر شوية عشان Render
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-# 2. تحميل قاعدة البيانات (تأكدي إن فولدر chroma_db_AI_Regulation مرفوع على GitHub)
-# db_directory = os.path.join(os.path.dirname(__file__), "chroma_db_AI_Regulation")
-# التعديل ده عشان يقرأ من الفولدر الفرعي اللي ظاهر في الصورة
-db_directory = os.path.join(os.path.dirname(__file__), "chroma_db_AI_Regulation", "9ead610c-ae4d-48e5-804f-317cd0405251")
-vector_db = Chroma(persist_directory=db_directory, embedding_function=embeddings)
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 MODEL_NAME = "google/gemini-2.0-flash-001"
 
 def ask_wanis(question: str):
     try:
-        # البحث في اللائحة كلها (دي أهم حتة إنتي عايزياها)
-        results = vector_db.similarity_search(question, k=3)
-        context = "\n\n".join([doc.page_content for doc in results])
+        # 1. قراءة اللائحة كاملة
+        json_path = os.path.join(os.path.dirname(__file__), "final_regulation_final_clean.json")
+        with open(json_path, "r", encoding="utf-8") as f:
+            full_data = json.load(f)
+
+        # 2. تحويل اللائحة لنصوص (فقرات) للبحث فيها
+        # هنفترض إن اللائحة عبارة عن قائمة أو قاموس كبير
+        content_text = json.dumps(full_data, ensure_ascii=False)
         
+        # 3. بحث ذكي بالكلمات المفتاحية (Keyword Search)
+        # بدل ما نبعت أول الملف، هندور على الكلمات اللي الطالب سأل عنها
+        keywords = question.split()
+        relevant_chunks = []
+        
+        # تقسيم النص لقطع (Chunks) والبحث عن الكلمات المفتاحية
+        chunks = [content_text[i:i+3000] for i in range(0, len(content_text), 2000)]
+        for chunk in chunks:
+            if any(key in chunk for key in keywords):
+                relevant_chunks.append(chunk)
+        
+        # لو ملاقاش كلمات مفتاحية، ياخد أول جزء كاحتياطي
+        context = "\n".join(relevant_chunks[:4]) if relevant_chunks else content_text[:8000]
+
+        # 4. إرسال السياق "المحدد" لـ Gemini
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -34,13 +43,14 @@ def ask_wanis(question: str):
             data=json.dumps({
                 "model": MODEL_NAME,
                 "messages": [
-                    {"role": "system", "content": "أنت 'ونيس'، صديق أكاديمي لطلاب جامعة المنصورة. استخدم السياق التالي فقط للرد بدقة من اللائحة."},
-                    {"role": "user", "content": f"السياق: {context}\n\nالسؤال: {question}"}
+                    {"role": "system", "content": "أنت 'ونيس'، صديق طلاب حاسبات المنصورة. استخدم المعلومات المرفقة فقط للإجابة بدقة."},
+                    {"role": "user", "content": f"السياق من اللائحة: {context}\n\nالسؤال: {question}"}
                 ]
             })
         )
         result = response.json()
         return result['choices'][0]['message']['content']
+
     except Exception as e:
         return f"حصل خطأ: {str(e)}"
 

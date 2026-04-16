@@ -9,7 +9,7 @@ class ChatRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"message": "Wanis API is running!"}
+    return {"message": "Rafiq API is running!"}
 
 @app.post("/ask")
 async def chat_endpoint(request: ChatRequest):

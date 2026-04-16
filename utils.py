@@ -10,33 +10,44 @@ MODEL_NAME = "google/gemini-2.0-flash-001"
 
 def ask_wanis(question: str):
     try:
-        # 1. قراءة اللائحة
         json_path = os.path.join(os.path.dirname(__file__), "final_regulation_final_clean.json")
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        full_text = json.dumps(data, ensure_ascii=False)
-        
-        # 2. البحث الذكي المتطور
-        # قائمة شاملة جداً تغطي أغلب الاهتمامات
-        search_terms = ["رابعة", "ثالثة", "ثانية", "أولى", "إعدادي", "مواد", "تحويل", "تنسيق", "نجاح", "رسوب", "رأفة", "صيفي", "ساعات", "إنذار", "مشروع"]
-        
+        # أهم خطوة: تحويل الـ JSON لنص منظم بجد يفهمه الذكاء الاصطناعي
+        def dict_to_text(d, indent=0):
+            text = ""
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    text += "  " * indent + str(k) + ": " + dict_to_text(v, indent + 1) + "\n"
+            elif isinstance(d, list):
+                for item in d:
+                    text += dict_to_text(item, indent + 1)
+            else:
+                text += str(d) + " "
+            return text
+
+        full_regulation_text = dict_to_text(data)
+
+        # البحث عن السياق المناسب (هناخد جزء كبير عشان نضمن الجداول)
         context = ""
-        # لو السؤال فيه أي كلمة من القائمة، بنروح لمكانها ونآخد نص كبير حواليها
-        for term in search_terms:
-            if term in question:
-                index = full_text.find(term)
+        keywords = ["رابعة", "ثالثة", "ثانية", "أولى", "مشروع", "ساعات", "نجاح"]
+        
+        found = False
+        for kw in keywords:
+            if kw in question:
+                index = full_regulation_text.find(kw)
                 if index != -1:
-                    start = max(0, index - 3000)
-                    end = min(len(full_text), index + 12000)
-                    context = full_text[start:end]
+                    # بناخد 20 ألف حرف (مساحة عملاقة Gemini Flash يقدر يشيلها)
+                    start = max(0, index - 2000)
+                    end = min(len(full_regulation_text), index + 18000)
+                    context = full_regulation_text[start:end]
+                    found = True
                     break
         
-        # 3. الأمان: لو ملقاش أي كلمة، ابعت أول 15 ألف حرف (فيها الخلاصة والقواعد العامة)
-        if not context:
-            context = full_text[:15000]
+        if not found:
+            context = full_regulation_text[:20000]
 
-        # 4. الطلب لـ Gemini
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -48,20 +59,20 @@ def ask_wanis(question: str):
                 "messages": [
                     {
                         "role": "system", 
-                        "content": "أنت 'ونيس' المساعد الأكاديمي الذكي لطلاب حاسبات المنصورة. "
-                                   "لديك جزء من اللائحة، استخرج منه الإجابة بدقة. "
-                                   "إذا لم تجد المعلومة صراحة، حاول الاستنتاج من القواعد العامة المتاحة، "
-                                   "وإذا تأكدت من عدم وجودها، وجه الطالب للمكان الصحيح (شؤون الطلاب أو الموقع الرسمي)."
+                        "content": "أنت 'ونيس' الخبير في لائحة كلية الحاسبات جامعة المنصورة. "
+                                   "أمامك نص منظم جداً للائحة. "
+                                   "عندما يطلب الطالب مواد سنة معينة، ابحث في الجداول المرفقة واذكر أسماء المواد وعدد ساعاتها بالتفصيل. "
+                                   "رد بأسلوب ودي كصديق."
                     },
-                    {"role": "user", "content": f"نص من اللائحة: {context}\n\nسؤال الطالب: {question}"}
+                    {"role": "user", "content": f"اللائحة المنظمة:\n{context}\n\nالسؤال: {question}"}
                 ],
-                "temperature": 0.4 
+                "temperature": 0.2
             })
         )
         return response.json()['choices'][0]['message']['content']
 
     except Exception as e:
-        return f"حصل خطأ يا هندسة: {str(e)}"
+        return f"حصل خطأ فني: {str(e)}"
 
 
 

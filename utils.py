@@ -10,6 +10,79 @@ load_dotenv()
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index("wanis-index")
 
+def ask_wanis(question: str, history: list = None, student_profile: dict = None):
+    # تعيين قيم افتراضية لو البيانات مجاتش من الباك إند
+    history = history or []
+    student_profile = student_profile or {}
+    
+    try:
+        # 1. التعديل اللي زميلك طلبه: استخدام query بدل fetch 
+        # الخطوات: تحويل السؤال لـ embedding (هنا بنستخدم الـ Zero vector كمثال لو لسه مجهزتيش الـ model) [cite: 38]
+        # الهدف: عمل Semantic Search لجلب أدق 3 قطع [cite: 37, 40, 43]
+        search_results = index.query(
+            vector=[0]*1536,  # هنا المفروض نحط الـ embedding بتاع السؤال [cite: 38]
+            top_k=3, 
+            include_metadata=True
+        )
+        
+        # تجميع النصوص من النتائج [cite: 39]
+        context = "\n".join([match['metadata']['text'] for match in search_results['matches']])
+
+        # 2. بناء الـ System Message الديناميكية [cite: 10]
+        level = student_profile.get('level', 'غير محدد') [cite: 15]
+        dept = student_profile.get('department', 'عام') [cite: 16]
+        status = student_profile.get('status', 'منتظم') [cite: 17]
+        
+        system_prompt = (
+            f"أنت 'رفيق' مساعد طلاب حاسبات المنصورة. "
+            f"أنت تتحدث الآن مع طالب في {level}، تخصص {dept}، وحالته {status}. " [cite: 26]
+            "استخدم اللائحة المرفقة للرد بدقة وبشكل مخصص لحالة الطالب." [cite: 18]
+        )
+
+        # 3. بناء الرسائل بالترتيب الصحيح (System -> History -> Current Question + Context) [cite: 20, 28]
+        messages = [{"role": "system", "content": system_prompt}] [cite: 26]
+        
+        # إضافة الـ History (آخر 6-10 رسائل) [cite: 27, 46]
+        for msg in history[-10:]:
+            messages.append(msg)
+            
+        # إضافة السؤال الحالي مع اللائحة (Context) في آخر رسالة فقط لتقليل التكلفة [cite: 24, 25, 30]
+        user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}" [cite: 28]
+        messages.append({"role": "user", "content": user_input})
+
+        # 4. إرسال الطلب لـ Gemini
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                "Content-Type": "application/json"
+            },
+            data=json.dumps({
+                "model": "google/gemini-2.0-flash-001",
+                "messages": messages,
+                "temperature": 0.3
+            })
+        )
+        return response.json()['choices'][0]['message']['content']
+        
+    except Exception as e:
+        return f"حصل خطأ بسيط: {str(e)}"
+
+
+
+"""
+import os
+from pinecone import Pinecone
+import requests
+import json
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# الاتصال بـ Pinecone
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+index = pc.Index("wanis-index")
+
 def ask_wanis(question: str):
     try:
         # 1. بنجمع الـ 8 قطع اللي رفعناهم
@@ -37,10 +110,7 @@ def ask_wanis(question: str):
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
         return f"حصل خطأ بسيط: {str(e)}"
-
-
-
-
+"""
 
 """
 import requests

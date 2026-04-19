@@ -1,30 +1,25 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from typing import List, Dict, Optional
 from utils import ask_wanis
 
 app = FastAPI()
 
-from pydantic import BaseModel
-from typing import List, Dict, Optional
-
+# تعريف شكل البيانات المستقبلة من الـ Backend
 class ChatRequest(BaseModel):
     question: str
-    # تاريخ المحادثة: قائمة فيها رسايل قديمة، لو مبعتوش حاجة هتبقى فاضية []
-    history: Optional[List[Dict[str, str]]] = [] [cite: 7, 22]
-    # بيانات الطالب: قاموس فيه (سنة، تخصص، حالة)، لو مبعتوش حاجة هتبقى فاضية {}
-    student_profile: Optional[Dict[str, str]] = {} [cite: 8, 9]
+    # تاريخ المحادثة (آخر 6-10 رسائل) لتمكين البوت من تذكر السياق
+    history: Optional[List[Dict[str, str]]] = []
+    # بيانات الطالب (سنة، تخصص، حالة) لتخصيص الردود
+    student_profile: Optional[Dict[str, str]] = {}
 
-"""
-class ChatRequest(BaseModel):
-    question: str
-"""
 @app.get("/")
 def read_root():
     return {"message": "Rafiq API is running!"}
 
 @app.post("/ask")
 async def chat_endpoint(request: ChatRequest):
-    # تمرير كل البيانات للفانكشن عشان البوت يبقى ذكي وفاكر التاريخ وعارف الطالب 
+    # تمرير البيانات لـ ask_wanis لجعل الردود مخصصة بناءً على بروفايل الطالب وتاريخ المحادثة
     answer = ask_wanis(
         question=request.question, 
         history=request.history, 

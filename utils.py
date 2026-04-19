@@ -1,5 +1,5 @@
 import os
-from pinecone import Cone
+from pinecone import Pinecone
 import requests
 import json
 from dotenv import load_dotenv
@@ -11,43 +11,43 @@ pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index("wanis-index")
 
 def ask_wanis(question: str, history: list = None, student_profile: dict = None):
-    # تعيين قيم افتراضية لو البيانات مجاتش من الباك إند
-    history = history or []
-    student_profile = student_profile or {}
+    # تعيين قيم افتراضية لو البيانات مجاتش من الباك إند [cite: 7, 8]
+    history = history or [] [cite: 7]
+    student_profile = student_profile or {} [cite: 8]
     
     try:
-        # 1. التعديل اللي زميلك طلبه: استخدام query بدل fetch 
-        # الهدف: عمل Semantic Search لجلب أدق 3 قطع
+        # 1. استخدام query بدل fetch لتحسين الأداء [cite: 32, 43]
+        # الخطوات: البحث عن أقرب أجزاء (3-5 قطع) [cite: 39, 40]
         search_results = index.query(
-            vector=[0]*1536,  # هنا المفروض نحط الـ embedding بتاع السؤال
-            top_k=3, 
+            vector=[0]*1536,  # استبدلي هذا بـ embedding السؤال الحقيقي لاحقاً [cite: 38]
+            top_k=3, [cite: 40, 41]
             include_metadata=True
         )
         
-        # تجميع النصوص من النتائج
+        # تجميع النصوص من النتائج [cite: 37]
         context = "\n".join([match['metadata']['text'] for match in search_results['matches']])
 
-        # 2. بناء الـ System Message الديناميكية
-        level = student_profile.get('level', 'غير محدد')
-        dept = student_profile.get('department', 'عام')
-        status = student_profile.get('status', 'منتظم')
+        # 2. بناء الـ System Message ديناميكية ببيانات الطالب [cite: 10, 11]
+        level = student_profile.get('level', 'غير محدد') [cite: 15]
+        dept = student_profile.get('department', 'عام') [cite: 16]
+        status = student_profile.get('status', 'منتظم') [cite: 17]
         
         system_prompt = (
-            f"أنت 'رفيق' مساعد طلاب حاسبات المنصورة. "
-            f"أنت تتحدث الآن مع طالب في {level}، تخصص {dept}، وحالته {status}. "
-            "استخدم اللائحة المرفقة للرد بدقة وبشكل مخصص لحالة الطالب."
+            f"أنت 'رفيق' مساعد طلاب حاسبات المنصورة. " [cite: 26]
+            f"أنت تتحدث الآن مع طالب في {level}، تخصص {dept}، وحالته {status}. " [cite: 15, 16, 17]
+            "استخدم اللائحة المرفقة للرد بدقة وبشكل مخصص لحالة الطالب." [cite: 18]
         )
 
-        # 3. بناء الرسائل بالترتيب الصحيح (System -> History -> Current Question + Context)
-        messages = [{"role": "system", "content": system_prompt}]
+        # 3. بناء الرسائل بالترتيب الصحيح (System -> History -> Current Question + Context) [cite: 19, 20]
+        messages = [{"role": "system", "content": system_prompt}] [cite: 26]
         
-        # إضافة الـ History (آخر 10 رسائل)
-        for msg in history[-10:]:
-            messages.append(msg)
+        # إضافة الـ History (آخر 6-10 رسائل) [cite: 27, 46]
+        for msg in history[-10:]: [cite: 46]
+            messages.append(msg) [cite: 22, 27]
             
-        # إضافة السؤال الحالي مع اللائحة (Context) في آخر رسالة فقط لتقليل التكلفة
-        user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}"
-        messages.append({"role": "user", "content": user_input})
+        # إضافة السؤال الحالي واللائحة في آخر رسالة فقط لتقليل التكلفة [cite: 24, 25, 30]
+        user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}" [cite: 28]
+        messages.append({"role": "user", "content": user_input}) [cite: 28]
 
         # 4. إرسال الطلب لـ Gemini
         response = requests.post(

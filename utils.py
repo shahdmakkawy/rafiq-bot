@@ -18,7 +18,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
     try:
         # 1. استخدام query للبحث عن أدق 3 قطع من اللائحة
         search_results = index.query(
-            vector=[0]*1536,  # سيتم استبداله بـ embedding السؤال لاحقاً
+            vector=[0]*1024,  # سيتم استبداله بـ embedding السؤال لاحقاً
             top_k=3,
             include_metadata=True
         )

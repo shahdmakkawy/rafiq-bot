@@ -26,18 +26,16 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
         # تجميع النصوص من النتائج
         context = "\n".join([match['metadata']['text'] for match in search_results['matches']])
 
-        # 2. بناء الـ System Message ببيانات الطالب (تمت إضافة الـ GPA والرسوب)
+      # 2. بناء الـ System Message ببيانات الطالب ونصائح ذكية
         level = student_profile.get('level', 'غير محدد')
         dept = student_profile.get('department', 'عام')
         status = student_profile.get('status', 'منتظم')
-        
-        # سحب البيانات الجديدة من البروفايل
         gpa = student_profile.get('gpa', 'غير متوفر')
         failed_courses = student_profile.get('failed_courses', 'لا يوجد')
-
-system_prompt = (
+        
+        system_prompt = (
             f"أنت 'رفيق' مساعد أكاديمي ذكي لطلاب حاسبات المنصورة. "
-            f"أنت تتحدث مع طالب في {level}، تخصص {dept}، وحالته {status}. "
+            f"أنت تتحدث الآن مع طالب في {level}، تخصص {dept}، وحالته {status}. "
             f"بياناته الحالية: GPA هو {gpa}، والمواد المتعثر فيها هي: {failed_courses}. "
             "مهمتك ليست فقط الإجابة، بل تقديم نصيحة أكاديمية ذكية: "
             "1. إذا كان الـ GPA منخفضاً، انصحه بتقليل عدد الساعات والتركيز على رفع التقدير. "

@@ -24,5 +24,17 @@ def read_root():
 
 @app.post("/ask")
 async def chat_endpoint(request: ChatRequest):
+    # تمرير كل البيانات للفانكشن عشان البوت يبقى ذكي وفاكر التاريخ وعارف الطالب 
+    answer = ask_wanis(
+        question=request.question, 
+        history=request.history, 
+        student_profile=request.student_profile
+    )
+    return {"answer": answer}
+    
+"""
+@app.post("/ask")
+async def chat_endpoint(request: ChatRequest):
     answer = ask_wanis(request.question)
     return {"answer": answer}
+"""

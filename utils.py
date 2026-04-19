@@ -26,15 +26,20 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
         # تجميع النصوص من النتائج
         context = "\n".join([match['metadata']['text'] for match in search_results['matches']])
 
-        # 2. بناء الـ System Message ببيانات الطالب
+        # 2. بناء الـ System Message ببيانات الطالب (تمت إضافة الـ GPA والرسوب)
         level = student_profile.get('level', 'غير محدد')
         dept = student_profile.get('department', 'عام')
         status = student_profile.get('status', 'منتظم')
         
+        # سحب البيانات الجديدة من البروفايل
+        gpa = student_profile.get('gpa', 'غير متوفر')
+        failed_courses = student_profile.get('failed_courses', 'لا يوجد')
+        
         system_prompt = (
             f"أنت 'رفيق' مساعد طلاب حاسبات المنصورة. "
             f"أنت تتحدث الآن مع طالب في {level}، تخصص {dept}، وحالته {status}. "
-            "استخدم اللائحة المرفقة للرد بدقة وبشكل مخصص لحالة الطالب."
+            f"معدل الطالب التراكمي (GPA) هو: {gpa}، والمواد التي رسب فيها سابقاً هي: {failed_courses}. "
+            "استخدم اللائحة المرفقة وبيانات الطالب للرد بدقة وبشكل مخصص جداً لحالته الأكاديمية."
         )
 
         # 3. ترتيب الرسائل (System -> History -> Question + Context)

@@ -10,23 +10,40 @@ load_dotenv()
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index("wanis-index")
 
+# --- الجزء الخاص بالربط مع الباك إند (اللي سألتِ عليه) ---
+def get_real_student_data(student_id):
+    """
+    هذه الدالة هي التي ستستخدم المفتاح اللي حطيتيه في ريندر 
+    لسحب البيانات الحقيقية بدلاً من الوهمية
+    """
+    api_key = os.getenv("X_AI_API_KEY") # سحب المفتاح من ريندر بأمان
+    
+    headers = {
+        "X-AI-API-KEY": api_key, # إضافة المفتاح في الهيدر كما طلبوا
+        "Content-Type": "application/json"
+    }
+    
+    # الرابط (URL) اللي تيم الباك إند لسه هيبعتهولك
+    # url = f"https://api.backend.com/student/{student_id}"
+    # response = requests.get(url, headers=headers)
+    # return response.json()
+    return None
+
 def ask_wanis(question: str, history: list = None, student_profile: dict = None):
-    # تعيين قيم افتراضية لو البيانات مجاتش من الباك إند
     history = history or []
     student_profile = student_profile or {}
     
     try:
-        # 1. استخدام query للبحث عن أدق 3 قطع من اللائحة
+        # 1. البحث في Pinecone
         search_results = index.query(
-            vector=[0]*1024,  # سيتم استبداله بـ embedding السؤال لاحقاً
+            vector=[0]*1024, 
             top_k=3,
             include_metadata=True
         )
         
-        # تجميع النصوص من النتائج
         context = "\n".join([match['metadata']['text'] for match in search_results['matches']])
 
-      # 2. بناء الـ System Message ببيانات الطالب ونصائح ذكية
+        # 2. بناء الـ System Message ببيانات الطالب
         level = student_profile.get('level', 'غير محدد')
         dept = student_profile.get('department', 'عام')
         status = student_profile.get('status', 'منتظم')
@@ -44,18 +61,15 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
             "اجعل نصيحتك ودودة، تشجيعية، ومبنية دائماً على نصوص اللائحة المرفقة."
         )
 
-        # 3. ترتيب الرسائل (System -> History -> Question + Context)
+        # 3. ترتيب الرسائل
         messages = [{"role": "system", "content": system_prompt}]
-        
-        # إضافة آخر 10 رسائل فقط من التاريخ
         for msg in history[-10:]:
             messages.append(msg)
             
-        # إضافة السؤال الحالي واللائحة في آخر رسالة فقط
         user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}"
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Gemini
+        # 4. إرسال الطلب لـ Gemini (باستخدام OpenRouter)
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={

@@ -6,24 +6,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# الاتصال بـ Pinecone
+# connecting with Pinecone
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index("wanis-index")
 
-# --- الجزء الخاص بالربط مع الباك إند (اللي سألتِ عليه) ---
+#  connecting with the back-end
 def get_real_student_data(student_id):
     """
-    هذه الدالة هي التي ستستخدم المفتاح اللي حطيتيه في ريندر 
-    لسحب البيانات الحقيقية بدلاً من الوهمية
+    this function will use the API that we used in Render, to make use the real data instead the fake one
     """
-    api_key = os.getenv("X_AI_API_KEY") # سحب المفتاح من ريندر بأمان
+    api_key = os.getenv("X_AI_API_KEY") # سحب المفتاح من ريندر 
     
     headers = {
-        "X-AI-API-KEY": api_key, # إضافة المفتاح في الهيدر كما طلبوا
+        "X-AI-API-KEY": api_key, 
         "Content-Type": "application/json"
     }
     
-    # الرابط (URL) اللي تيم الباك إند لسه هيبعتهولك
+    # the URL of the bach-end
     # url = f"https://api.backend.com/student/{student_id}"
     # response = requests.get(url, headers=headers)
     # return response.json()
@@ -34,7 +33,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
     student_profile = student_profile or {}
     
     try:
-        # 1. البحث في Pinecone
+        # 1. search in Pinecone
         search_results = index.query(
             vector=[0]*1024, 
             top_k=3,
@@ -61,7 +60,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
             "اجعل نصيحتك ودودة، تشجيعية، ومبنية دائماً على نصوص اللائحة المرفقة."
         )
 
-        # 3. ترتيب الرسائل
+        # 3. messages ordering 
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history[-10:]:
             messages.append(msg)
@@ -69,7 +68,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
         user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}"
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Gemini (باستخدام OpenRouter)
+        # 4. sending a requed to gemini using OpenRouter
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={

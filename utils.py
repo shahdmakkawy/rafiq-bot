@@ -19,10 +19,9 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
     student_profile = student_profile or {}
     context = ""
     
-    # 1. البحث في Pinecone مع حماية لو حصل خطأ
+    # 1. البحث في Pinecone
     if index:
         try:
-            # بنحاول نجيب أبعاد الـ Index أوتوماتيك عشان السيستم م يضربش
             index_stats = index.describe_index_stats()
             dimension = index_stats.get('dimension', 1024)
             
@@ -77,7 +76,6 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
         if 'choices' in response_data:
             return response_data['choices'][0]['message']['content']
         else:
-            # التعديل السحري: لو فيه Error حقيقي من OpenRouter هيظهر هنا بالملي
             return f"تفاصيل خطأ السيرفر: {json.dumps(response_data)}"
             
     except Exception as e:

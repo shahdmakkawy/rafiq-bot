@@ -71,7 +71,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
                 "Content-Type": "application/json"
             },
             data=json.dumps({
-                "model": "meta-llama/llama-3-8b-instruct:free",  # الموديل المجاني الشغال والمستقر حالياً
+                "model": "google/gemini-2.5-flash:free",  # الموديل المجاني الشغال والمستقر حالياً
                 "messages": messages,
                 "temperature": 0.3
             })

@@ -176,6 +176,8 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
 
 
 """
+
+"""
 import os
 from pinecone import Pinecone
 import requests

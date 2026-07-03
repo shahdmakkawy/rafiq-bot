@@ -104,9 +104,8 @@ index = pc.Index("wanis-index")
 
 #  connecting with the back-end
 def get_real_student_data(student_id):
-    """
+
     #this function will use the API that we used in Render, to make use the real data instead the fake one
-    """
     api_key = os.getenv("X_AI_API_KEY") # سحب المفتاح من ريندر 
     
     headers = {

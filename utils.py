@@ -6,93 +6,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# الاتصال بـ Pinecone
-try:
-    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    index = pc.Index("wanis-index")
-except Exception as e:
-    print(f"Pinecone Init Error: {e}")
-    index = None
-
-def ask_wanis(question: str, history: list = None, student_profile: dict = None):
-    history = history or []
-    student_profile = student_profile or {}
-    context = ""
-    
-    # 1. البحث في Pinecone
-    if index:
-        try:
-            index_stats = index.describe_index_stats()
-            dimension = index_stats.get('dimension', 1024)
-            
-            search_results = index.query(
-                vector=[0]*dimension, 
-                top_k=3,
-                include_metadata=True
-            )
-            context = "\n".join([match['metadata']['text'] for match in search_results.get('matches', []) if 'text' in match.get('metadata', {})])
-        except Exception as e:
-            print(f"Pinecone Search Error: {e}")
-            context = "تعذر جلب نصوص اللائحة مؤقتاً."
-
-    # 2. بناء الـ System Message
-    level = student_profile.get('level', 'غير محدد')
-    dept = student_profile.get('department', 'عام')
-    status = student_profile.get('status', 'منتظم')
-    gpa = student_profile.get('gpa', 'غير متوفر')
-    failed_courses = student_profile.get('failed_courses', 'لا يوجد')
-    
-    system_prompt = (
-        f"أنت 'رفيق' مساعد أكاديمي ذكي لطلاب حاسبات المنصورة. "
-        f"أنت تتحدث الآن مع طالب في {level}، تخصص {dept}، وحالته {status}. "
-        f"بياناته الحالية: GPA هو {gpa}، والمواد المتعثر فيها هي: {failed_courses}. "
-        "مهمتك تقديم نصيحة أكاديمية ذكية بناءً على حالته الدراسية بأسلوب مصري ودود وتشجيعي."
-    )
-
-    # 3. ترتيب الرسائل
-    messages = [{"role": "system", "content": system_prompt}]
-    for msg in history[-10:]:
-        messages.append(msg)
-        
-    user_input = f"بناءً على معلومات اللائحة المتاحة:\n{context}\n\nالسؤال: {question}"
-    messages.append({"role": "user", "content": user_input})
-
-    # 4. إرسال الطلب لـ OpenRouter
-    try:
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
-                "Content-Type": "application/json"
-            },
-            data=json.dumps({
-                "model": "meta-llama/llama-3-8b-instruct:free",
-                "messages": messages,
-                "temperature": 0.3
-            })
-        )
-        
-        response_data = response.json()
-        if 'choices' in response_data:
-            return response_data['choices'][0]['message']['content']
-        else:
-            return f"تفاصيل خطأ السيرفر: {json.dumps(response_data)}"
-            
-    except Exception as e:
-        return f"خطأ في الاتصال: {str(e)}"
-
-
-
-
-"""
-import os
-from pinecone import Pinecone
-import requests
-import json
-from dotenv import load_dotenv
-
-load_dotenv()
-
 # connecting with Pinecone
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index("wanis-index")
@@ -175,7 +88,6 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
 
 
 
-"""
 
 """
 import os

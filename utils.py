@@ -68,7 +68,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
         user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}"
         messages.append({"role": "user", "content": user_input})
 
-        # 4. sending a requed to gemini using OpenRouter
+        # 4. sending a requed to the used model using OpenRouter
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -76,7 +76,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
                 "Content-Type": "application/json"
             },
             data=json.dumps({
-                model:"google/gemma-4-31b-it:free",
+                "model": "google/gemma-2-9b-it:free",
                 "messages": messages,
                 "temperature": 0.3
             })

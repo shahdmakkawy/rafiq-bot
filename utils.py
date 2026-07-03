@@ -76,7 +76,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
                 "Content-Type": "application/json"
             },
             data=json.dumps({
-                "model": "google/gemini-2.0-flash-001",
+                model="google/gemma-4-31b-it:free",
                 "messages": messages,
                 "temperature": 0.3
             })

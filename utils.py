@@ -71,7 +71,7 @@ def ask_wanis(question: str, history: list = None, student_profile: dict = None)
                 "Content-Type": "application/json"
             },
             data=json.dumps({
-                "model": "google/gemma-4-31b-it:free",  # الموديل المجاني الشغال والمستقر حالياً
+                "model": "nvidia/nemotron-3-ultra-550b-a55b:free",  # الموديل المجاني الشغال والمستقر حالياً
                 "messages": messages,
                 "temperature": 0.3
             })

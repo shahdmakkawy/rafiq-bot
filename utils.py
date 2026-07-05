@@ -78,7 +78,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 "Content-Type": "application/json"
             },
             data=json.dumps({
-                "model": "meta-llama/llama-3-8b-instruct:free", 
+                "model": "qwen/qwen3-32b:free", 
                 "messages": messages,
                 "temperature": 0.3
             })

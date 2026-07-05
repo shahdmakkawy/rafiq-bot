@@ -5,12 +5,10 @@ from utils import ask_wanis
 
 app = FastAPI()
 
-# تعريف شكل البيانات المستقبلة من الـ Backend
+# Backend تعريف شكل البيانات المستقبلة من الـ
 class ChatRequest(BaseModel):
+    student_id: str = "default_student"  # معرف الطالب لربط الذاكرة والهيستوري
     question: str
-    # تاريخ المحادثة (آخر 6-10 رسائل) لتمكين البوت من تذكر السياق
-    history: Optional[List[Dict[str, str]]] = []
-    # بيانات الطالب (سنة، تخصص، حالة) لتخصيص الردود
     student_profile: Optional[Dict[str, str]] = {}
 
 @app.get("/")
@@ -19,10 +17,10 @@ def read_root():
 
 @app.post("/ask")
 async def chat_endpoint(request: ChatRequest):
-    # تمرير البيانات لـ ask_wanis لجعل الردود مخصصة بناءً على بروفايل الطالب وتاريخ المحادثة
+    # لعمل الردود مخصصة بناءً على بروفايل الطالب وتاريخ المحادثة نمرر البيانات لـ ask_wanis
     answer = ask_wanis(
-        question=request.question, 
-        history=request.history, 
+        question=request.question,
+        student_id=request.student_id,
         student_profile=request.student_profile
     )
     return {"answer": answer}

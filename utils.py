@@ -60,25 +60,28 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
 1. المسميات: استخدم مسميات مناسبة زي (يا بطل، يا هندسة، يا بشمهندس/بشمهندسة). بلاش كلمة "دكتور" إلا لو الطالب هو اللي قال إنه دكتور.
 2. حذف الأكواد التقنية: ممنوع تماماً ذكر الأكواد الرقمية الغريبة اللي بتظهر بين الأقواس زي [1 0 1 1] أو [2 0 1 2]. الطالب مش بيفهمها وبتبوظ شكل الإجابة. اذكر رقم المادة فقط بشكل طبيعي.
 3. الدقة الرقمية: مصدرك الوحيد هو "سياق اللائحة". لما الطالب يسأل عن أرقام (ساعات، GPA، تقديرات)، استخرجها بدقة ومتاكد منها 100%.
-4. التوثيق الودي: اذكر المصدر في نهاية كلامك بلطافة، مثلاً: "وده حسب المادة 12 في اللائحة".
+4. التوثيق الودي: اذكر المصدر في نهاية كلامك بلطافة, مثلاً: "وده حسب المادة 12 في اللائحة".
 5. لو المعلومة مش موجودة: قول بذكاء: "بص يا بطل، دورت لك في اللائحة يمين وشمال بس النص ده مش واضح عندي، فالأضمن اسأل شؤون الطلاب أو إدارة البرنامج".
 6. البداية والنهاية: ابدأ بترحيب لطيف (نورت يا هندسة، أهلاً يا بطل)، وانتهي بدعوة تشجع الطالب (بالتوفيق يا عالم المستقبل، شد حيلك يا بطل)."""
 
-        # 3. ترتيب الرسائل (System + التاريخ القديم)
+        # 3. ترتيب الرسائل بطريقة تمنع التكرار وتجبر الموديل يلتزم بالسياق
         messages = [{"role": "system", "content": system_instruction}]
-        for msg in history[-5:]:  # قللت الهيستوري لـ 5 عشان نمنع التكرار تماماً
+        for msg in history[-6:]:  # قراءة آخر 6 رسائل فقط من تاريخ المحادثة لضمان استقرار السياق
             messages.append(msg)
             
-        # صياغة واضحة ومباشرة تمنع الموديل من قراءة الداتا كـ Loop
         user_input = (
-            f"محتوى اللائحة المسترجع:\n{context}\n\n"
-            f"بيانات الطالب: مستوى {level}، تخصص {dept}، حالة {status}، معدل {gpa}، مواد متعثرة: {failed_courses}.\n\n"
-            f"السؤال الحالي: {question}\n\n"
-            f"أجبني الآن مباشرة وبشخصيتك المحددة وبدون تكرار جمل."
+            f"سياق ومعلومات اللائحة:\n{context}\n\n"
+            f"بيانات الطالب الحالي للتخصيص:\n"
+            f"- المستوى الأكاديمي: {level}\n"
+            f"- التخصص الدراسي: {dept}\n"
+            f"- الحالة الدراسية: {status}\n"
+            f"- المعدل التراكمي الحاضر (GPA): {gpa}\n"
+            f"- المواد المتعثر فيها الطالب: {failed_courses}\n\n"
+            f"سؤال الطالب: {question}"
         )
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Groq API بموديل Llama 3.1
+        # 4. إرسال الطلب لـ Groq بموديل Gemma 2 العبقري في العربية والعامية
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         
@@ -89,10 +92,9 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama-3.1-8b-instant",
+                "model": "gemma2-9b-it",  # تغيير الموديل لـ Gemma 2 الأذكى في صياغة الجمل العربية
                 "messages": messages,
-                "temperature": 0.1,  # نزلنا الـ Temperature لـ 0.1 عشان ننهي الهلوسة والتكرار نهائياً
-                "max_tokens": 800
+                "temperature": 0.4
             }
         )
         
@@ -101,7 +103,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         if 'choices' in response_data and len(response_data['choices']) > 0:
             bot_answer = response_data['choices'][0]['message']['content']
             
-            # 💾 حفظ السؤال والرد في ذاكرة الطالب
+            # 💾 حفظ الذاكرة
             STUDENT_CHATS_HISTORY[student_id].append({"role": "user", "content": question})
             STUDENT_CHATS_HISTORY[student_id].append({"role": "assistant", "content": bot_answer})
             

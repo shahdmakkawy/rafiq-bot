@@ -76,7 +76,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         )
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Groq بموديل Mixtral المستقر والبعيد عن مشاكل اللاما
+        # 4. إرسال الطلب لـ Groq بالموديل الكبير والمتاح حالياً من ميسرال
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         
@@ -87,7 +87,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 "Content-Type": "application/json"
             },
             json={
-                "model": "mixtral-8x7b-32768",  # الانتقال لعائلة موديلات ميسرال المستقرة
+                "model": "mixtral-8x22b-instruct",  # الإصدار الحالي الشغال والمتاح رسمياً من عائلة ميسترال
                 "messages": messages,
                 "temperature": 0.5
             }

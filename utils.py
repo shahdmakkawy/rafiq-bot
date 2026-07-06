@@ -10,7 +10,7 @@ load_dotenv()
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index("wanis-index")
 
-# 🧠 ذاكرة مؤقتة لحفظ تاريخ المحادثات لكل طالب بناءً على الـ ID بتاعه
+# 🧠 ذاكرة مؤفتة لحفظ تاريخ المحادثات لكل طالب بناءً على الـ ID بتاعه
 STUDENT_CHATS_HISTORY = {}
 
 # connecting with the back-end
@@ -70,22 +70,27 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}"
         messages.append({"role": "user", "content": user_input})
 
-        # 4. sending a request to the used model using OpenRouter
+        # 4. إرسال الطلب لـ Groq API الصاروخي والمجاني (بديل OpenRouter المتقلب)
+        groq_key = os.getenv("GROQ_API_KEY")
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        
         response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
+            url=url,
             headers={
-                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                "Authorization": f"Bearer {groq_key}",
                 "Content-Type": "application/json"
             },
-            data=json.dumps({
-                "model": "google/gemma-4-31b-it:free", 
+            json={
+                "model": "llama3-8b-8192",  # الموديل السريع والقوي المتاح مجاناً
                 "messages": messages,
                 "temperature": 0.3
-            })
+            }
         )
         
         response_data = response.json()
-        if 'choices' in response_data:
+        
+        # التأكد من أن الرد رجع سليماً وقراءة الإجابة
+        if 'choices' in response_data and len(response_data['choices']) > 0:
             bot_answer = response_data['choices'][0]['message']['content']
             
             # 💾 حفظ السؤال والرد في ذاكرة الطالب عشان المرة الجاية يفتكرهم
@@ -94,7 +99,9 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
             
             return bot_answer
         else:
-            return f"خطأ من سيرفر OpenRouter: {json.dumps(response_data)}"
+            # طباعة الخطأ في سيرفر ريندر لو حصلت مشكلة عشان تظهر في الـ Logs
+            print("Groq Error Response:", response_data)
+            return f"خطأ من سيرفر Groq: {json.dumps(response_data)}"
         
     except Exception as e:
         return f"حصل خطأ بسيط: {str(e)}"

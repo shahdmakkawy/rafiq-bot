@@ -10,7 +10,7 @@ load_dotenv()
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index("wanis-index")
 
-# 🧠 ذاكرة مؤفتة لحفظ تاريخ المحادثات لكل طالب بناءً على الـ ID بتاعه
+# 🧠 ذاكرة مؤقتة لحفظ تاريخ المحادثات لكل طالب بناءً على الـ ID بتاعه
 STUDENT_CHATS_HISTORY = {}
 
 # connecting with the back-end
@@ -70,7 +70,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}"
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Groq API الصاروخي والمجاني (بديل OpenRouter المتقلب)
+        # 4. إرسال الطلب لـ Groq API الصاروخي والمجاني (تحديث الموديل لـ Llama 3.1 المدعوم حالياً)
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         
@@ -81,7 +81,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama3-8b-8192",  # الموديل السريع والقوي المتاح مجاناً
+                "model": "llama-3.1-8b-instant",  # الاسم الجديد للموديل الأحدث المدعوم مجاناً من Groq
                 "messages": messages,
                 "temperature": 0.3
             }

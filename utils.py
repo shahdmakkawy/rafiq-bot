@@ -51,7 +51,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         gpa = student_profile.get('gpa', 'غير متوفر')
         failed_courses = student_profile.get('failed_courses', 'لا يوجد')
         
-        # Prompt Engineering, to handle the bot
+        # الـ Prompt الأساسي بتاعكم زي ما هو بالملي
         system_instruction = """أنت "رفيق"، الصديق الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة.\n\n\n
 شخصيتك:
 أنت "السينير" الجدع، المثقف، واللبق. أسلوبك فيه مودة واحترام، كأنك بتنصح أخوك الصغير أو زميلك في الكلية. ابعد عن الرسمية المتخشبية وفي نفس الوقت خليك رزين.
@@ -64,18 +64,26 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
 5. لو المعلومة مش موجودة: قول بذكاء: "بص يا بطل، دورت لك في اللائحة يمين وشمال بس النص ده مش واضح عندي، فالأضمن اسأل شؤون الطلاب أو إدارة البرنامج".
 6. البداية والنهاية: ابدأ بترحيب لطيف (نورت يا هندسة، أهلاً يا بطل)، وانتهي بدعوة تشجع الطالب (بالتوفيق يا عالم المستقبل، شد حيلك يا بطل)."""
 
-        # دمج بيانات الطالب مع التوجيهات
-        full_prompt = f"{system_instruction}\n\nبيانات الطالب الحالي:\nالمستوى: {level}\nالتخصص: {dept}\nالحالة: {status}\nالـ GPA: {gpa}\nالمواد المتعثر فيها: {failed_courses}"
-
-        # 3. ترتيب الرسائل (System + التاريخ القديم)
-        messages = [{"role": "system", "content": full_prompt}]
+        # 3. ترتيب الرسائل وفصل بيانات الطالب عشان الموديل يستوعبها وميختصرش
+        messages = [{"role": "system", "content": system_instruction}]
         for msg in history[-10:]:  # بناخد آخر 10 رسائل بس عشان الـ Tokens
             messages.append(msg)
             
-        user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}"
+        # وضع البيانات والـ Context والسؤال بشكل منظم جداً في رسالة المستخدم
+        user_input = (
+            f"بيانات الطالب الحالي المتاحة:\n"
+            f"- المستوى: {level}\n"
+            f"- التخصص: {dept}\n"
+            f"- الحالة: {status}\n"
+            f"- المعدل التراكمي (GPA): {gpa}\n"
+            f"- المواد المتعثر فيها الطالب حالياً: {failed_courses}\n\n"
+            f"سياق ومعلومات اللائحة المسترجعة:\n{context}\n\n"
+            f"السؤال المطروح: {question}\n\n"
+            f"جاوبني بالتفصيل وبشكل مريح ومقنع ومفصل بناءً على شخصيتك وقواعدك المحددة."
+        )
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Groq API بموديل Llama 3.1
+        # 4. إرسال الطلب لـ Groq API بموديل Llama 3.1 مع ضبط الـ Temperature لردود أكثر مرونة
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         
@@ -88,7 +96,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
             json={
                 "model": "llama-3.1-8b-instant",
                 "messages": messages,
-                "temperature": 0.3
+                "temperature": 0.5  # رفعنا الحرارة لـ 0.5 عشان يفك الجمود ويدي أسلوب أروق وأطول
             }
         )
         
@@ -97,7 +105,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         if 'choices' in response_data and len(response_data['choices']) > 0:
             bot_answer = response_data['choices'][0]['message']['content']
             
-            # 💾 حفظ السؤال والرد في ذاكرة الطالب عشان المرة الجاية يفتكرهم
+            # 💾 حفظ السؤال والرد في ذاكرة الطالب
             STUDENT_CHATS_HISTORY[student_id].append({"role": "user", "content": question})
             STUDENT_CHATS_HISTORY[student_id].append({"role": "assistant", "content": bot_answer})
             

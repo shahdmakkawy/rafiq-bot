@@ -15,11 +15,7 @@ STUDENT_CHATS_HISTORY = {}
 
 # connecting with the back-end
 def get_real_student_data(student_id):
-    """
-    #this function will use the API that we used in Render, to make use the real data instead the fake one
-    """
     api_key = os.getenv("X_AI_API_KEY") 
-    
     headers = {
         "X-AI-API-KEY": api_key, 
         "Content-Type": "application/json"
@@ -27,7 +23,6 @@ def get_real_student_data(student_id):
     return None
 
 def ask_wanis(question: str, student_id: str = "default_student", student_profile: dict = None):
-    # 1. سحب الهيستوري القديم للطالب ده لو موجود، لو مش موجود بنعمله قائمة فاضية
     if student_id not in STUDENT_CHATS_HISTORY:
         STUDENT_CHATS_HISTORY[student_id] = []
         
@@ -81,7 +76,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         )
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Groq بموديل Llama 3.1 70B العملاق والمستقر
+        # 4. إرسال الطلب لـ Groq بموديل Mixtral المستقر والبعيد عن مشاكل اللاما
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         
@@ -92,9 +87,9 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama-3.1-70b-versatile",  # الموديل الكبير الذكي عشان ننهي الهلوسة
+                "model": "mixtral-8x7b-32768",  # الانتقال لعائلة موديلات ميسرال المستقرة
                 "messages": messages,
-                "temperature": 0.4
+                "temperature": 0.5
             }
         )
         

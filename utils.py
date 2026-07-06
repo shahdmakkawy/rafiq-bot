@@ -46,7 +46,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         gpa = student_profile.get('gpa', 'غير متوفر')
         failed_courses = student_profile.get('failed_courses', 'لا يوجد')
         
-        # الـ Prompt الأساسي بتاعكم زي ما هو بالملي
+        # الـ Prompt الأصلي بتاعك بالملي وبدون تعديل حرف واحد
         system_instruction = """أنت "رفيق"، الصديق الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة.\n\n\n
 شخصيتك:
 أنت "السينير" الجدع، المثقف، واللبق. أسلوبك فيه مودة واحترام، كأنك بتنصح أخوك الصغير أو زميلك في الكلية. ابعد عن الرسمية المتخشبية وفي نفس الوقت خليك رزين.
@@ -59,7 +59,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
 5. لو المعلومة مش موجودة: قول بذكاء: "بص يا بطل، دورت لك في اللائحة يمين وشمال بس النص ده مش واضح عندي، فالأضمن اسأل شؤون الطلاب أو إدارة البرنامج".
 6. البداية والنهاية: ابدأ بترحيب لطيف (نورت يا هندسة، أهلاً يا بطل)، وانتهي بدعوة تشجع الطالب (بالتوفيق يا عالم المستقبل، شد حيلك يا بطل)."""
 
-        # 3. ترتيب الرسائل
+        # 3. ترتيب الرسائل للحفاظ على الذاكرة
         messages = [{"role": "system", "content": system_instruction}]
         for msg in history[-6:]:  
             messages.append(msg)
@@ -76,7 +76,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         )
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Groq بالموديل المدعوم والمتاح رسمياً 100%
+        # 4. إرسال الطلب لـ Groq بالموديل المتاح والشغال والمدعوم رسمياً حالياً
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         
@@ -87,10 +87,9 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama3-8b-8192",  # الموديل المتاح والأساسي الشغال حالياً على السيرفر
+                "model": "llama-3.1-8b-instant",  # الاسم التقني الصحيح والمتاح رسمياً
                 "messages": messages,
-                "temperature": 0.0,          # صفر عشان نمنع أي تكرار أو هبد نهائياً
-                "max_tokens": 300
+                "temperature": 0.0  # صفر حاسم لمنع التكرار والتهنيج في الصياغة العربية
             }
         )
         

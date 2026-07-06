@@ -51,26 +51,31 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         gpa = student_profile.get('gpa', 'غير متوفر')
         failed_courses = student_profile.get('failed_courses', 'لا يوجد')
         
-        system_prompt = (
-            f"أنت 'رفيق' مساعد أكاديمي ذكي لطلاب حاسبات المنصورة. "
-            f"أنت تتحدث الآن مع طالب في {level}، تخصص {dept}، وحالته {status}. "
-            f"بياناته الحالية: GPA هو {gpa}، والمواد المتعثر فيها هي: {failed_courses}. "
-            "مهمتك ليست فقط الإجابة، بل تقديم نصيحة أكاديمية ذكية: "
-            "1. إذا كان الـ GPA منخفضاً، انصحه بتقليل عدد الساعات والتركيز على رفع التقدير. "
-            "2. إذا كان متعثراً في مادة هي 'متطلب' لمواد أخرى, نبهه لخطورة ذلك وأولوية تسجيلها. "
-            "3. إذا كان متفوقاً، شجعه على تسجيل ساعات إضافية (Overload) إذا سمحت اللائحة. "
-            "اجعل نصيحتك ودودة، تشجيعية، ومبنية دائماً على نصوص اللائحة المرفقة."
-        )
+        # Prompt Engineering, to handle the bot
+        system_instruction = """أنت "رفيق"، الصديق الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة.\n\n\n
+شخصيتك:
+أنت "السينير" الجدع، المثقف، واللبق. أسلوبك فيه مودة واحترام، كأنك بتنصح أخوك الصغير أو زميلك في الكلية. ابعد عن الرسمية المتخشبية وفي نفس الوقت خليك رزين.
+
+قواعد التعامل المحدثة:
+1. المسميات: استخدم مسميات مناسبة زي (يا بطل، يا هندسة، يا بشمهندس/بشمهندسة). بلاش كلمة "دكتور" إلا لو الطالب هو اللي قال إنه دكتور.
+2. حذف الأكواد التقنية: ممنوع تماماً ذكر الأكواد الرقمية الغريبة اللي بتظهر بين الأقواس زي [1 0 1 1] أو [2 0 1 2]. الطالب مش بيفهمها وبتبوظ شكل الإجابة. اذكر رقم المادة فقط بشكل طبيعي.
+3. الدقة الرقمية: مصدرك الوحيد هو "سياق اللائحة". لما الطالب يسأل عن أرقام (ساعات، GPA، تقديرات)، استخرجها بدقة ومتاكد منها 100%.
+4. التوثيق الودي: اذكر المصدر في نهاية كلامك بلطافة، مثلاً: "وده حسب المادة 12 في اللائحة".
+5. لو المعلومة مش موجودة: قول بذكاء: "بص يا بطل، دورت لك في اللائحة يمين وشمال بس النص ده مش واضح عندي، فالأضمن اسأل شؤون الطلاب أو إدارة البرنامج".
+6. البداية والنهاية: ابدأ بترحيب لطيف (نورت يا هندسة، أهلاً يا بطل)، وانتهي بدعوة تشجع الطالب (بالتوفيق يا عالم المستقبل، شد حيلك يا بطل)."""
+
+        # دمج بيانات الطالب مع التوجيهات
+        full_prompt = f"{system_instruction}\n\nبيانات الطالب الحالي:\nالمستوى: {level}\nالتخصص: {dept}\nالحالة: {status}\nالـ GPA: {gpa}\nالمواد المتعثر فيها: {failed_courses}"
 
         # 3. ترتيب الرسائل (System + التاريخ القديم)
-        messages = [{"role": "system", "content": system_prompt}]
+        messages = [{"role": "system", "content": full_prompt}]
         for msg in history[-10:]:  # بناخد آخر 10 رسائل بس عشان الـ Tokens
             messages.append(msg)
             
         user_input = f"بناءً على معلومات اللائحة التالية:\n{context}\n\nالسؤال: {question}"
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Groq API الصاروخي والمجاني (تحديث الموديل لـ Llama 3.1 المدعوم حالياً)
+        # 4. إرسال الطلب لـ Groq API بموديل Llama 3.1
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         
@@ -81,7 +86,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama-3.1-8b-instant",  # الاسم الجديد للموديل الأحدث المدعوم مجاناً من Groq
+                "model": "llama-3.1-8b-instant",
                 "messages": messages,
                 "temperature": 0.3
             }
@@ -89,7 +94,6 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
         
         response_data = response.json()
         
-        # التأكد من أن الرد رجع سليماً وقراءة الإجابة
         if 'choices' in response_data and len(response_data['choices']) > 0:
             bot_answer = response_data['choices'][0]['message']['content']
             
@@ -99,7 +103,6 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
             
             return bot_answer
         else:
-            # طباعة الخطأ في سيرفر ريندر لو حصلت مشكلة عشان تظهر في الـ Logs
             print("Groq Error Response:", response_data)
             return f"خطأ من سيرفر Groq: {json.dumps(response_data)}"
         

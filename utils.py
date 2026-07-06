@@ -64,26 +64,21 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
 5. لو المعلومة مش موجودة: قول بذكاء: "بص يا بطل، دورت لك في اللائحة يمين وشمال بس النص ده مش واضح عندي، فالأضمن اسأل شؤون الطلاب أو إدارة البرنامج".
 6. البداية والنهاية: ابدأ بترحيب لطيف (نورت يا هندسة، أهلاً يا بطل)، وانتهي بدعوة تشجع الطالب (بالتوفيق يا عالم المستقبل، شد حيلك يا بطل)."""
 
-        # 3. ترتيب الرسائل وفصل بيانات الطالب عشان الموديل يستوعبها وميختصرش
+        # 3. ترتيب الرسائل (System + التاريخ القديم)
         messages = [{"role": "system", "content": system_instruction}]
-        for msg in history[-10:]:  # بناخد آخر 10 رسائل بس عشان الـ Tokens
+        for msg in history[-5:]:  # قللت الهيستوري لـ 5 عشان نمنع التكرار تماماً
             messages.append(msg)
             
-        # وضع البيانات والـ Context والسؤال بشكل منظم جداً في رسالة المستخدم
+        # صياغة واضحة ومباشرة تمنع الموديل من قراءة الداتا كـ Loop
         user_input = (
-            f"بيانات الطالب الحالي المتاحة:\n"
-            f"- المستوى: {level}\n"
-            f"- التخصص: {dept}\n"
-            f"- الحالة: {status}\n"
-            f"- المعدل التراكمي (GPA): {gpa}\n"
-            f"- المواد المتعثر فيها الطالب حالياً: {failed_courses}\n\n"
-            f"سياق ومعلومات اللائحة المسترجعة:\n{context}\n\n"
-            f"السؤال المطروح: {question}\n\n"
-            f"جاوبني بالتفصيل وبشكل مريح ومقنع ومفصل بناءً على شخصيتك وقواعدك المحددة."
+            f"محتوى اللائحة المسترجع:\n{context}\n\n"
+            f"بيانات الطالب: مستوى {level}، تخصص {dept}، حالة {status}، معدل {gpa}، مواد متعثرة: {failed_courses}.\n\n"
+            f"السؤال الحالي: {question}\n\n"
+            f"أجبني الآن مباشرة وبشخصيتك المحددة وبدون تكرار جمل."
         )
         messages.append({"role": "user", "content": user_input})
 
-        # 4. إرسال الطلب لـ Groq API بموديل Llama 3.1 مع ضبط الـ Temperature لردود أكثر مرونة
+        # 4. إرسال الطلب لـ Groq API بموديل Llama 3.1
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/chat/completions"
         
@@ -96,7 +91,8 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
             json={
                 "model": "llama-3.1-8b-instant",
                 "messages": messages,
-                "temperature": 0.5  # رفعنا الحرارة لـ 0.5 عشان يفك الجمود ويدي أسلوب أروق وأطول
+                "temperature": 0.1,  # نزلنا الـ Temperature لـ 0.1 عشان ننهي الهلوسة والتكرار نهائياً
+                "max_tokens": 800
             }
         )
         

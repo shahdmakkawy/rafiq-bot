@@ -1,56 +1,53 @@
 import os
+from pinecone import Pinecone
+import requests
+import json
 from dotenv import load_dotenv
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
-from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
-# شحن ملف الـ .env محلياً (في الـ Production هتقرأ من الـ Environment Variables مباشرة)
 load_dotenv()
 
-# 1. إعداد موديل الـ Embeddings وقاعدة البيانات (Chroma DB)
-# تأكدي أن مجلد الـ chroma_db_AI_Regulation مرفوع مع المشروع أو المسار بتاعه مظبوط
-db_directory = "./chroma_db_AI_Regulation"
-model_name = "BAAI/bge-m3"
-encode_kwargs = {'normalize_embeddings': True}
+# connecting with Pinecone
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+index = pc.Index("wanis-index")
 
-# تحديد الكرت الشغال أو المعالج
-import torch
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# 🧠 ذاكرة مؤقتة لحفظ تاريخ المحادثات لكل طالب بناءً على الـ ID بتاعه
+STUDENT_CHATS_HISTORY = {}
 
-embeddings = HuggingFaceEmbeddings(
-    model_name=model_name,
-    model_kwargs={'device': device},
-    encode_kwargs=encode_kwargs
-)
+# connecting with the back-end
+def get_real_student_data(student_id):
+    api_key = os.getenv("X_AI_API_KEY") 
+    headers = {
+        "X-AI-API-KEY": api_key, 
+        "Content-Type": "application/json"
+    }
+    return None
 
-# استدعاء قاعدة البيانات المتجهية الحالية
-vector_db = Chroma(persist_directory=db_directory, embedding_function=embeddings)
-
-# 2. تعريف الموديلين (الأساسي والبديل) بالاعتماد على os.getenv
-llm_openrouter = ChatOpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    model="google/gemma-2-9b-it:free",  # الموديل المجاني الذكي
-    temperature=0.4
-)
-
-llm_groq = ChatGroq(
-    groq_api_key=os.getenv("GROQ_API_KEY"),
-    model_name="llama-3.1-8b-instant",
-    temperature=0.55
-)
-
-# 3. دالة ask_rafiq الذكية والمحدثة بـ Silent Fallback
-def ask_rafiq(question: str, chat_history_list: list = None) -> str:
-    try:
-        # مرحلة الـ Retrieval
-        results = vector_db.similarity_search(question, k=3)
-        context = "\n\n---\n\n".join([doc.page_content for doc in results])
+def ask_wanis(question: str, student_id: str = "default_student", student_profile: dict = None):
+    if student_id not in STUDENT_CHATS_HISTORY:
+        STUDENT_CHATS_HISTORY[student_id] = []
         
-        # الـ Prompt الأصلي المميز لشخصية رفيق
+    history = STUDENT_CHATS_HISTORY[student_id]
+    student_profile = student_profile or {}
+    
+    try:
+        # 1. search in Pinecone
+        search_results = index.query(
+            vector=[0]*1024, 
+            top_k=3,
+            include_metadata=True
+        )
+        
+        context = "\n".join([match['metadata']['text'] for match in search_results['matches']])
+
+        # 2. بناء الـ System Message ببيانات الطالب
+        level = student_profile.get('level', 'غير محدد')
+        dept = student_profile.get('department', 'عام')
+        status = student_profile.get('status', 'منتظم')
+        gpa = student_profile.get('gpa', 'غير متوفر')
+        failed_courses = student_profile.get('failed_courses', 'لا يوجد')
+        
         system_instruction = """أنت "رفيق"، الصديق الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة.
+
 
 شخصيتك:
 أنت "السينير" الجدع، المثقف، واللبق. أسلوبك فيه مودة واحترام، كأنك بتنصح أخوك الصغير أو زميلك في الكلية. ابعد عن الرسمية المتخشبية وفي نفس الوقت خليك رزين.
@@ -63,40 +60,86 @@ def ask_rafiq(question: str, chat_history_list: list = None) -> str:
 5. لو المعلومة مش موجودة: قول بذكاء: "بص يا بطل، دورت لك في اللائحة يمين وشمال بس النص ده مش واضح عندي، فالأضمن اسأل شؤون الطلاب أو إدارة البرنامج".
 6. البداية والنهاية: ابدأ بترحيب لطيف (نورت يا هندسة، أهلاً يا بطل)، وانتهي بدعوة تشجع الطالب (بالتوفيق يا عالم المستقبل، شد حيلك يا بطل)."""
 
-        messages = [SystemMessage(content=system_instruction)]
-        
-        # تحويل الهيستوري القادم من الـ API لرسائل يفهمها لانجشين
-        if chat_history_list:
-            for turn in chat_history_list[-2:]:  # حفظاً للمساحة والـ Rate Limits
-                user_msg = turn[0]
-                bot_msg = turn[1]
-                if user_msg:
-                    messages.append(HumanMessage(content=user_msg))
-                if bot_msg:
-                    messages.append(AIMessage(content=bot_msg))
-                    
-        # دمج الـ Context الحالي
-        user_prompt = f"السياق المستخرج من اللائحة:\n{context}\n\nسؤال الطالب: {question}"
-        messages.append(HumanMessage(content=user_prompt))
-        
+        # 3. ترتيب الرسائل للحفاظ على الذاكرة
+        messages = [{"role": "system", "content": system_instruction}]
+        for msg in history[-4:]:  
+            messages.append(msg)
+            
+        user_input = (
+            f"سياق ومعلومات اللائحة:\n{context}\n\n"
+            f"بيانات الطالب الحالي للتخصيص:\n"
+            f"- المستوى الأكاديمي: {level}\n"
+            f"- التخصص الدراسي: {dept}\n"
+            f"- الحالة الدراسية: {status}\n"
+            f"- المعدل التراكمي الحاضر (GPA): {gpa}\n"
+            f"- المواد المتعثر فيها الطالب: {failed_courses}\n\n"
+            f"سؤال الطالب: {question}"
+        )
+        messages.append({"role": "user", "content": user_input})
+
         bot_answer = ""
-        # تنفيذ الـ Silent Fallback
+        
+        # 4. الـ Fallback Logic الصامت تماماً باستخدام الـ APIs مباشرة
         try:
-            response = llm_openrouter.invoke(messages)
-            bot_answer = response.content
+            # الخيار الأول: محاولة استخدام OpenRouter للحصول على أفضل جودة
+            openrouter_key = os.getenv("OPENROUTER_API_KEY")
+            or_url = "https://openrouter.ai/api/v1/chat/completions"
+            
+            or_response = requests.post(
+                url=or_url,
+                headers={
+                    "Authorization": f"Bearer {openrouter_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "google/gemma-2-9b-it:free",
+                    "messages": messages,
+                    "temperature": 0.4
+                },
+                timeout=10
+            )
+            or_data = or_response.json()
+            if 'choices' in or_data and len(or_data['choices']) > 0:
+                bot_answer = or_data['choices'][0]['message']['content']
+            else:
+                raise Exception("OpenRouter failed or empty choice")
+                
         except Exception:
-            # التحويل الصامت فوراً لـ Groq عند حدوث عطل في OpenRouter
+            # الخيار الثاني البديل الصامت: لو OpenRouter وقع، بنروح لـ Groq فوراً
             try:
-                response = llm_groq.invoke(messages)
-                bot_answer = response.content
+                groq_key = os.getenv("GROQ_API_KEY")
+                groq_url = "https://api.groq.com/openai/v1/chat/completions"
+                
+                groq_response = requests.post(
+                    url=groq_url,
+                    headers={
+                        "Authorization": f"Bearer {groq_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "llama-3.1-8b-instant",
+                        "messages": messages,
+                        "temperature": 0.55 # درجة حرارة متوسطة للعامية المصرية المظبوطة في Groq
+                    },
+                    timeout=10
+                )
+                groq_data = groq_response.json()
+                if 'choices' in groq_data and len(groq_data['choices']) > 0:
+                    bot_answer = groq_data['choices'][0]['message']['content']
+                else:
+                    bot_answer = "بص يا بطل، حصلت مشكلة فنية بسيطة في السيرفر عندي دلوقتي، جرب تسألني تاني كمان ثواني كده."
             except Exception:
                 bot_answer = "بص يا بطل، حصلت مشكلة فنية بسيطة في السيرفر عندي دلوقتي، جرب تسألني تاني كمان ثواني كده."
-                
-        # معالجة النصوص وتنظيف الـ Escape Characters للـ Swagger والـ UI
+
+        # 5. تنظيف الـ \n نصية من الـ Output النهائي قبل الرجوع
         if bot_answer:
             bot_answer = bot_answer.replace("\\n", "\n").replace("\\\\n", "\n").strip()
+            
+            # 💾 حفظ الذاكرة فقط لو أرجع رد حقيقي
+            STUDENT_CHATS_HISTORY[student_id].append({"role": "user", "content": question})
+            STUDENT_CHATS_HISTORY[student_id].append({"role": "assistant", "content": bot_answer})
             
         return bot_answer
         
     except Exception as e:
-        return f"حصل خطأ داخلي في معالجة الطلب: {str(e)}"
+        return f"حصل خطأ بسيط: {str(e)}"

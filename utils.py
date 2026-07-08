@@ -6,11 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 🧠 ذاكرة مؤقتة لحفظ تاريخ المحادثات لكل طالب بناءً على الـ ID بتاعه
+# 🧠 ذاكرة مؤقتة لحفظ تاريخ المحادثات لكل طالب
 STUDENT_CHATS_HISTORY = {}
 
 def get_embedding_groq(text: str):
-    """تحويل سؤال الطالب إلى متجه عددي (Embedding) بأبعاد 1024 بدقة عبر Groq API"""
     try:
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/embeddings"
@@ -31,7 +30,6 @@ def get_embedding_groq(text: str):
         return res_data['data'][0]['embedding']
     except Exception as e:
         print(f"Embedding Error: {str(e)}")
-        # Fallback لمتجه صفري إذا فشل الـ API حتى لا يتوقف النظام بالكامل
         return [0] * 1024
 
 def ask_wanis(question: str, student_id: str = "default_student", student_profile: dict = None):
@@ -43,14 +41,14 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     
     context = ""
     try:
-        # 1. البحث الذكي في Pinecone بناءً على الـ Embedding الفعلي للسؤال
+        # 1. استدعاء Pinecone بأمان كامل داخل الدالة لمنع كراش السيرفر عند البدء
         try:
             pinecone_key = os.getenv("PINECONE_API_KEY")
             if pinecone_key:
+                # الـ Initialization هنا جوه الـ try عشان لو فشل، الـ API يفضل قايم
                 pc = Pinecone(api_key=pinecone_key)
                 index = pc.Index("wanis-index")
                 
-                # توليد الـ Embedding للسؤال الحالي بدلاً من الأصفار الثابتة
                 query_vector = get_embedding_groq(question)
                 
                 search_results = index.query(

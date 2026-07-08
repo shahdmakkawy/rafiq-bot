@@ -1,5 +1,5 @@
 import os
-from pinecone import Cone  # سيتم استدعاؤها عبر الكلاس الجديد تلقائياً من المكتبة
+#from pinecone import Cone  # سيتم استدعاؤها عبر الكلاس الجديد تلقائياً من المكتبة
 from pinecone import Pinecone
 import requests
 import json

@@ -1,4 +1,5 @@
 import os
+from pinecone import Cone  # سيتم استدعاؤها عبر الكلاس الجديد تلقائياً من المكتبة
 from pinecone import Pinecone
 import requests
 import json
@@ -40,47 +41,47 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     student_profile = student_profile or {}
     
     context = ""
+    
+    # 1. جلب سياق اللائحة عبر الـ Embedding والبحث في Pinecone
     try:
-        try:
-            pinecone_key = os.getenv("PINECONE_API_KEY")
-            groq_key = os.getenv("GROQ_API_KEY")
-            
-            if pinecone_key and groq_key:
-                # 1. تحويل سؤال الطالب لـ Vector حقيقي بدلاً من الأصفار العشوائية
-                embed_url = "https://api.groq.com/openai/v1/embeddings"
-                embed_response = requests.post(
-                    url=embed_url,
-                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                    json={"model": "nomic-embed-text-v1.5", "input": question},
-                    timeout=5
-                )
-                query_vector = embed_response.json()['data'][0]['embedding']
-                
-                # 2. البحث في Pinecone بالـ Vector الحقيقي بتاع السؤال
-                pc = Pinecone(api_key=pinecone_key)
-                index = pc.Index("wanis-index")
-                
-                search_results = index.query(
-                    vector=query_vector, # <--- هنا السحر، بنبحث بالسؤال نفسه!
-                    top_k=3,
-                    include_metadata=True
-                )
-                context = "\n".join([match['metadata']['text'] for match in search_results['matches'] if 'metadata' in match and 'text' in match['metadata']])
-            else:
-                context = "بيئة العمل تفتقد لمفاتيح الاتصال."
-        except Exception as e:
-            context = "تعذر استخراج سياق اللائحة حالياً بسبب عطل في قاعدة البيانات."
-
-        # بقية كود الـ System Instruction والـ OpenRouter زي ما هو بالظبط تحت...
-
-        # 2. بناء الـ System Message ببيانات الطالب
-        level = student_profile.get('level', 'غير محدد')
-        dept = student_profile.get('department', 'عام')
-        status = student_profile.get('status', 'منتظم')
-        gpa = student_profile.get('gpa', 'غير متوفر')
-        failed_courses = student_profile.get('failed_courses', 'لا يوجد')
+        pinecone_key = os.getenv("PINECONE_API_KEY")
+        groq_key = os.getenv("GROQ_API_KEY")
         
-        system_instruction = """أنت "رفيق"، الصديق الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة.
+        if pinecone_key and groq_key:
+            # تحويل سؤال الطالب لـ Vector حقيقي
+            embed_url = "https://api.groq.com/openai/v1/embeddings"
+            embed_response = requests.post(
+                url=embed_url,
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={"model": "nomic-embed-text-v1.5", "input": question},
+                timeout=5
+            )
+            query_vector = embed_response.json()['data'][0]['embedding']
+            
+            # البحث في Pinecone بالـ Vector الحقيقي
+            pc = Pinecone(api_key=pinecone_key)
+            index = pc.Index("wanis-index")
+            
+            search_results = index.query(
+                vector=query_vector, 
+                top_k=3,
+                include_metadata=True
+            )
+            context = "\n".join([match['metadata']['text'] for match in search_results['matches'] if 'metadata' in match and 'text' in match['metadata']])
+        else:
+            context = "بيئة العمل تفتقد لمفاتيح الاتصال."
+    except Exception as e:
+        print(f"Pinecone/Embedding Error: {str(e)}")
+        context = "تعذر استخراج سياق اللائحة حالياً بسبب عطل في قاعدة البيانات."
+
+    # 2. بناء الـ System Message وتخصيص بيانات الطالب الدراسية
+    level = student_profile.get('level', 'غير محدد')
+    dept = student_profile.get('department', 'عام')
+    status = student_profile.get('status', 'منتظم')
+    gpa = student_profile.get('gpa', 'غير متوفر')
+    failed_courses = student_profile.get('failed_courses', 'لا يوجد')
+    
+    system_instruction = """أنت "رفيق"، الصديق الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة.
 
 شخصيتك:
 أنت "السينير" الجدع، المثقف، واللبق. أسلوبك فيه مودة واحترام، كأنك بتنصح أخوك الصغير أو زميلك في الكلية. ابعد عن الرسمية المتخشبية وفي نفس الوقت خليك رزين.
@@ -93,80 +94,77 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
 5. لو المعلومة مش موجودة: قول بذكاء: "بص يا بطل، دورت لك في اللائحة يمين وشمال بس النص ده مش واضح عندي، فالأضمن اسأل شؤون الطلاب أو إدارة البرنامج".
 6. البداية والنهاية: ابدأ بترحيب لطيف (نورت يا هندسة، أهلاً يا بطل)، وانتهي بدعوة تشجع الطالب (بالتوفيق يا عالم المستقبل، شد حيلك يا بطل)."""
 
-        messages = [{"role": "system", "content": system_instruction}]
-        for msg in history[-4:]:  
-            messages.append(msg)
-            
-        user_input = (
-            f"سياق ومعلومات اللائحة:\n{context}\n\n"
-            f"بيانات الطالب الحالي للتخصيص:\n"
-            f"- المستوى الأكاديمي: {level}\n"
-            f"- التخصص الدراسي: {dept}\n"
-            f"- الحالة الدراسية: {status}\n"
-            f"- المعدل التراكمي الحاضر (GPA): {gpa}\n"
-            f"- المواد المتعثر فيها الطالب: {failed_courses}\n\n"
-            f"سؤال الطالب: {question}"
-        )
-        messages.append({"role": "user", "content": user_input})
-
-        bot_answer = ""
+    messages = [{"role": "system", "content": system_instruction}]
+    for msg in history[-4:]:  
+        messages.append(msg)
         
-        # 4. الـ Fallback Logic الصامت تماماً
-        try:
-            openrouter_key = os.getenv("OPENROUTER_API_KEY")
-            or_url = "https://openrouter.ai/api/v1/chat/completions"
+    user_input = (
+        f"سياق ومعلومات اللائحة:\n{context}\n\n"
+        f"بيانات الطالب الحالي للتخصيص:\n"
+        f"- المستوى الأكاديمي: {level}\n"
+        f"- التخصص الدراسي: {dept}\n"
+        f"- الحالة الدراسية: {status}\n"
+        f"- المعدل التراكمي الحاضر (GPA): {gpa}\n"
+        f"- المواد المتعثر فيها الطالب: {failed_courses}\n\n"
+        f"سؤال الطالب: {question}"
+    )
+    messages.append({"role": "user", "content": user_input})
+
+    bot_answer = ""
+    
+    # 3. استدعاء الموديل من الـ APIs مع نظام الـ Fallback
+    try:
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        or_url = "https://openrouter.ai/api/v1/chat/completions"
+        
+        or_response = requests.post(
+            url=or_url,
+            headers={
+                "Authorization": f"Bearer {openrouter_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "google/gemma-2-9b-it:free",
+                "messages": messages,
+                "temperature": 0.4
+            },
+            timeout=10
+        )
+        or_data = or_response.json()
+        if 'choices' in or_data and len(or_data['choices']) > 0:
+            bot_answer = or_data['choices'][0]['message']['content']
+        else:
+            raise Exception("OpenRouter failed")
             
-            or_response = requests.post(
-                url=or_url,
+    except Exception:
+        try:
+            groq_key = os.getenv("GROQ_API_KEY")
+            groq_url = "https://api.groq.com/openai/v1/chat/completions"
+            
+            groq_response = requests.post(
+                url=groq_url,
                 headers={
-                    "Authorization": f"Bearer {openrouter_key}",
+                    "Authorization": f"Bearer {groq_key}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "google/gemma-2-9b-it:free",
+                    "model": "llama-3.1-8b-instant",
                     "messages": messages,
-                    "temperature": 0.4
+                    "temperature": 0.55
                 },
                 timeout=10
             )
-            or_data = or_response.json()
-            if 'choices' in or_data and len(or_data['choices']) > 0:
-                bot_answer = or_data['choices'][0]['message']['content']
+            groq_data = groq_response.json()
+            if 'choices' in groq_data and len(groq_data['choices']) > 0:
+                bot_answer = groq_data['choices'][0]['message']['content']
             else:
-                raise Exception("OpenRouter failed")
-                
-        except Exception:
-            try:
-                groq_key = os.getenv("GROQ_API_KEY")
-                groq_url = "https://api.groq.com/openai/v1/chat/completions"
-                
-                groq_response = requests.post(
-                    url=groq_url,
-                    headers={
-                        "Authorization": f"Bearer {groq_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": "llama-3.1-8b-instant",
-                        "messages": messages,
-                        "temperature": 0.55
-                    },
-                    timeout=10
-                )
-                groq_data = groq_response.json()
-                if 'choices' in groq_data and len(groq_data['choices']) > 0:
-                    bot_answer = groq_data['choices'][0]['message']['content']
-                else:
-                    bot_answer = "بص يا بطل، حصلت مشكلة فنية بسيطة في السيرفر عندي دلوقتي، جرب تسألني تاني كمان ثواني كده."
-            except Exception:
                 bot_answer = "بص يا بطل، حصلت مشكلة فنية بسيطة في السيرفر عندي دلوقتي، جرب تسألني تاني كمان ثواني كده."
+        except Exception:
+            bot_answer = "بص يا بطل، حصلت مشكلة فنية بسيطة في السيرفر عندي دلوقتي، جرب تسألني تاني كمان ثواني كده."
 
-        if bot_answer:
-            bot_answer = bot_answer.replace("\\n", "\n").replace("\\\\n", "\n").replace(r"\n", "\n").strip()
-            STUDENT_CHATS_HISTORY[student_id].append({"role": "user", "content": question})
-            STUDENT_CHATS_HISTORY[student_id].append({"role": "assistant", "content": bot_answer})
-            
-        return bot_answer
+    if bot_answer:
+        bot_answer = bot_answer.replace("\\n", "\n").replace("\\\\n", "\n").replace(r"\n", "\n").strip()
+        STUDENT_CHATS_HISTORY[student_id].append({"role": "user", "content": question})
+        STUDENT_CHATS_HISTORY[student_id].append({"role": "assistant", "content": bot_answer})
         
-    except Exception as e:
-        return f"حصل خطأ بسيط: {str(e)}"
+    return bot_answer

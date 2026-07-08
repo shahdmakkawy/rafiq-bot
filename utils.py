@@ -94,7 +94,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 json={
                     "model": "google/gemma-2-9b-it:free",
                     "messages": messages,
-                    "temperature": 0.4
+                    "temperature": 0.0
                 },
                 timeout=10
             )
@@ -119,7 +119,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                     json={
                         "model": "llama-3.1-8b-instant",
                         "messages": messages,
-                        "temperature": 0.55 # درجة حرارة متوسطة للعامية المصرية المظبوطة في Groq
+                        "temperature": 0.5 # درجة حرارة متوسطة للعامية المصرية المظبوطة في Groq
                     },
                     timeout=10
                 )

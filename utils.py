@@ -132,8 +132,11 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 bot_answer = "بص يا بطل، حصلت مشكلة فنية بسيطة في السيرفر عندي دلوقتي، جرب تسألني تاني كمان ثواني كده."
 
         # 5. تنظيف الـ \n نصية من الـ Output النهائي قبل الرجوع
+       # if bot_answer:
+       #     bot_answer = bot_answer.replace("\\n", "\n").replace("\\\\n", "\n").strip()
         if bot_answer:
-            bot_answer = bot_answer.replace("\\n", "\n").replace("\\\\n", "\n").strip()
+            # التعديل الشامل لتنظيف الرموز النصية وتحويلها لأسطر حقيقية
+            bot_answer = bot_answer.replace("\\n", "\n").replace("\\\\n", "\n").replace(r"\n", "\n").strip()    
             
             # 💾 حفظ الذاكرة فقط لو أرجع رد حقيقي
             STUDENT_CHATS_HISTORY[student_id].append({"role": "user", "content": question})

@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from langchain_chroma import Chroma  # أو langchain_community.vectorstores حسب النسخة المثبتة
+from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq

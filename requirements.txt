@@ -1,12 +1,5 @@
-langchain-community
-langchain-huggingface
-langchain-openai
-langchain-groq
-chromadb
-python-dotenv
-torch
 fastapi
 uvicorn
 requests
+pinecone-client
 python-dotenv
-pinecone

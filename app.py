@@ -2,17 +2,15 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Tuple
 # توحيد اسم الدالة المستوردة من ملف utils
-from utils import ask_rafiq
+from utils import ask_wanis
 
 app = FastAPI(title="Rafiq AI Bot API", version="1.0")
 
 # تعريف شكل البيانات المستقبلة من الـ Frontend أو الـ Mobile
 class ChatRequest(BaseModel):
     question: str
-    student_id: str = "default_student"
+    student_id: Optional[str] = "default_student"
     student_profile: Optional[Dict[str, str]] = {}
-    # إضافة حقل الهيستوري هنا عشان يستقبل الذاكرة من الفرونت إند
-    # الهيستوري بيتبعت كقائمة من الأزواج: [["سؤال الطالب السابق", "رد البوت السابق"]]
     chat_history: Optional[List[Tuple[str, str]]] = []
 
 @app.get("/")
@@ -21,10 +19,11 @@ def read_root():
 
 @app.post("/ask")
 async def chat_endpoint(request: ChatRequest):
-    # تمرير السؤال وقائمة الهيستوري للدالة الذكية المحدثة
-    answer = ask_rafiq(
+    # تمرير السؤال، الـ ID، وبيانات الطالب للدالة الذكية المحدثة
+    answer = ask_wanis(
         question=request.question,
-        chat_history_list=request.chat_history
+        student_id=request.student_id,
+        student_profile=request.student_profile
     )
     
     return {"answer": answer}

@@ -41,26 +41,37 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     
     context = ""
     try:
-        # 1. استدعاء Pinecone بأمان كامل داخل الدالة لمنع كراش السيرفر عند البدء
         try:
             pinecone_key = os.getenv("PINECONE_API_KEY")
-            if pinecone_key:
-                # الـ Initialization هنا جوه الـ try عشان لو فشل، الـ API يفضل قايم
+            groq_key = os.getenv("GROQ_API_KEY")
+            
+            if pinecone_key and groq_key:
+                # 1. تحويل سؤال الطالب لـ Vector حقيقي بدلاً من الأصفار العشوائية
+                embed_url = "https://api.groq.com/openai/v1/embeddings"
+                embed_response = requests.post(
+                    url=embed_url,
+                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                    json={"model": "nomic-embed-text-v1.5", "input": question},
+                    timeout=5
+                )
+                query_vector = embed_response.json()['data'][0]['embedding']
+                
+                # 2. البحث في Pinecone بالـ Vector الحقيقي بتاع السؤال
                 pc = Pinecone(api_key=pinecone_key)
                 index = pc.Index("wanis-index")
                 
-                query_vector = get_embedding_groq(question)
-                
                 search_results = index.query(
-                    vector=query_vector, 
+                    vector=query_vector, # <--- هنا السحر، بنبحث بالسؤال نفسه!
                     top_k=3,
                     include_metadata=True
                 )
                 context = "\n".join([match['metadata']['text'] for match in search_results['matches'] if 'metadata' in match and 'text' in match['metadata']])
             else:
-                context = "بيئة العمل تفتقد لمفتاح اتصال قاعدة البيانات المتجهية."
-        except Exception as pinecone_error:
+                context = "بيئة العمل تفتقد لمفاتيح الاتصال."
+        except Exception as e:
             context = "تعذر استخراج سياق اللائحة حالياً بسبب عطل في قاعدة البيانات."
+
+        # بقية كود الـ System Instruction والـ OpenRouter زي ما هو بالظبط تحت...
 
         # 2. بناء الـ System Message ببيانات الطالب
         level = student_profile.get('level', 'غير محدد')

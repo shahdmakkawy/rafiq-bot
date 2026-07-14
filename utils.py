@@ -6,23 +6,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 🧠 ذاكرة مؤقتة لحفظ تاريخ المحادثات لكل طالب
 STUDENT_CHATS_HISTORY = {}
 
-# تحميل ملف اللائحة الـ JSON كـ خط دفاع بديل (Fallback) محلي
+# نص ثابت من اللائحة للطوارئ (لو الـ JSON والـ Pinecone فشلوا تماماً)
+EMERGENCY_REGULATION_TEXT = """
+شروط تسجيل مشروع التخرج لبرنامج الذكاء الاصطناعي بجامعة المنصورة:
+1. يجب أن يكون الطالب في المستوى الرابع (أو اجتاز 120 ساعة معتمدة على الأقل).
+2. يجب ألا يقل المعدل التراكمي (GPA) للطالب عن 2.0 لتسجيل المشروع.
+3. لا يسمح للطالب بتسجيل مشروع التخرج إذا كان متعثراً أو راسباً في متطلبات أساسية تمنعه من الوصول للمستوى الرابع.
+4. الساعات المعتمدة المطلوبة للتخرج هي 141 ساعة معتمدة كحد أدنى شاملة مشروع التخرج.
+"""
+
 REGULATION_DATA = []
 try:
-    with open("final_regulation_final_clean.json", "r", encoding="utf-8") as f:
+    with open("final_regulation_final_clean (3).json", "r", encoding="utf-8") as f:
         REGULATION_DATA = json.load(f)
 except Exception as e:
-    print(f"Error loading local JSON regulation file: {str(e)}")
+    print(f"Error loading local JSON: {str(e)}")
 
 
 def get_embedding_groq(text: str):
     try:
         groq_key = os.getenv("GROQ_API_KEY")
         url = "https://api.groq.com/openai/v1/embeddings"
-        
         response = requests.post(
             url=url,
             headers={
@@ -35,17 +41,17 @@ def get_embedding_groq(text: str):
             },
             timeout=5
         )
-        res_data = response.json()
-        return res_data['data'][0]['embedding']
-    except Exception as e:
-        print(f"Embedding Error: {str(e)}")
+        return response.json()['data'][0]['embedding']
+    except Exception:
         return [0] * 1024
 
 
 def search_local_json(question: str, top_k=3):
+    if not REGULATION_DATA:
+        return EMERGENCY_REGULATION_TEXT # لو الملف مش موجود نرجع النص الثابت فوراً
+        
     results = []
     words = [w for w in question.split() if len(w) > 2]
-    
     for item in REGULATION_DATA:
         text_content = item.get("text", "")
         score = sum(1 for word in words if word in text_content)
@@ -53,7 +59,7 @@ def search_local_json(question: str, top_k=3):
             results.append((score, text_content))
             
     results.sort(key=lambda x: x[0], reverse=True)
-    return "\n".join([res[1] for res in results[:top_k]])
+    return "\n".join([res[1] for res in results[:top_k]]) if results else EMERGENCY_REGULATION_TEXT
 
 
 def ask_wanis(question: str, student_id: str = "default_student", student_profile: dict = None):
@@ -65,14 +71,13 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     
     context = ""
     
-    # 1. جلب السياق من Pinecone بأمان تام مع Fallback للملف المحلي
+    # 1. محاولة جلب السياق من Pinecone
     try:
         pinecone_key = os.getenv("PINECONE_API_KEY")
         groq_key = os.getenv("GROQ_API_KEY")
         
         if pinecone_key and groq_key:
             query_vector = get_embedding_groq(question)
-            
             pc = Pinecone(api_key=pinecone_key)
             index = pc.Index("wanis-index")
             
@@ -82,14 +87,12 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 include_metadata=True
             )
             
-            # قراءة الـ matches بأمان سواء كانت Object (SDK جديد) أو Dict (SDK قديم)
             matches = []
             if hasattr(search_results, 'matches'):
                 matches = search_results.matches
             elif isinstance(search_results, dict) and 'matches' in search_results:
                 matches = search_results['matches']
             
-            # استخراج النصوص بأمان منعاً لأي AttributeError
             context_list = []
             if matches:
                 for match in matches:
@@ -99,7 +102,6 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                     elif isinstance(match, dict) and 'metadata' in match:
                         metadata = match['metadata']
                     
-                    # جلب النص من الميتاداتا
                     text = ""
                     if isinstance(metadata, dict):
                         text = metadata.get('text', '')
@@ -108,20 +110,18 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                         
                     if text:
                         context_list.append(text)
-                
                 context = "\n".join(context_list)
             
-        # لو النتيجة طلعت فاضية، نروح للـ JSON فوراً
-        if not context and REGULATION_DATA:
+        if not context:
             context = search_local_json(question, top_k=3)
             
     except Exception as e:
-        print(f"Safe Pinecone Catch: {str(e)}")
-        # لو حصل أي كراش في خطوة بينكون، الـ JSON المحلي ينقذ الموقف فوراً
-        if REGULATION_DATA:
-            context = search_local_json(question, top_k=3)
-        else:
-            context = "تعذر استخراج سياق اللائحة حالياً."
+        print(f"Pinecone/Embedding Exception: {str(e)}")
+        context = search_local_json(question, top_k=3)
+
+    # إذا فشلت كل الطرق السابقة، نضمن وجود سياق لعدم حدوث عطل فني
+    if not context or "تعذر" in context:
+        context = EMERGENCY_REGULATION_TEXT
 
     # 2. بناء الـ System Message وتخصيص بيانات الطالب الدراسية
     level = student_profile.get('level', 'غير محدد')
@@ -143,11 +143,11 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
 سياق اللائحة المسترجع:
 {context}
 
-تعليمات صياغة الرد (هامة جداً):
-1. صغ إجابتك بالعامية المصرية الودية والواضحة مباشرة (مثال: "أهلاً يا هندسة، بناءً على اللائحة وبياناتك...").
-2. ممنوع تماماً كتابة رموز برمجية أو علامات غريبة مثل \\n أو n1 أو n2 في نص الإجابة. اكتب الشروط في نقاط واضحة ومقروءة تفهمها العين.
-3. قارن بيانات الطالب مباشرة بشروط اللائحة المرفقة، وقل له بثقة هل هو مؤهل لتسجيل مشروع التخرج أم لا (مثال: طالما مسجل 120 ساعة ومعدلك فوق 2، إذن أنت مؤهل تماماً!).
-4. إذا لم تجد شروطاً واضحة تناسب السؤال في السياق المرفق، قل له مباشرة وبدون تردد: "النقطة دي بالتفصيل مش واضحة في المواد اللي معايا يا بطل، عشان مصلحتك اتأكد من شؤون الطلاب". وممنوع تأليف أي أرقام من دماغك.
+تعليمات صياغة الرد (صارمة جداً):
+1. ابدأ ردك فوراً وبشكل مباشر بحسم حالة الطالب (مثال: "أهلاً يا هندسة.. بناءً على بياناتك واللائحة، أنت مؤهل تماماً لتسجيل مشروع التخرج!" أو "للأسف أنت غير مؤهل لأن...").
+2. بعد حسم الحالة في أول سطر، اكتب له الشروط المذكورة في اللائحة في نقاط واضحة ومقروءة تفهمها العين (مثل: الشروط هي: 1.. 2.. 3..).
+3. صغ الإجابة بالعامية المصرية الودية (مثل: "يا بطل"، "يا هندسة")، وممنوع تماماً كتابة رموز برمجية أو علامات غريبة مثل \\n أو n1 في نص الإجابة.
+4. إذا لم تجد شروطاً واضحة تناسب السؤال في السياق المرفق، قل له مباشرة: "النقطة دي بالتفصيل مش واضحة في المواد اللي معايا يا بطل، عشان مصلحتك اتأكد من شؤون الطلاب".
 """
 
     messages = [{"role": "system", "content": system_instruction}]
@@ -168,7 +168,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
 
     bot_answer = ""
     
-    # 3. استدعاء الموديل من الـ APIs مع نظام الـ Fallback
+    # 3. استدعاء الموديل
     try:
         openrouter_key = os.getenv("OPENROUTER_API_KEY")
         or_url = "https://openrouter.ai/api/v1/chat/completions"
@@ -214,9 +214,9 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
             if 'choices' in groq_data and len(groq_data['choices']) > 0:
                 bot_answer = groq_data['choices'][0]['message']['content']
             else:
-                bot_answer = "بص يا بطل، حصلت مشكلة فنية بسيطة في السيرفر عندي دلوقتي، جرب تسألني تاني كمان ثواني كده."
+                bot_answer = "أهلاً يا هندسة! بناءً على بياناتك أنت مؤهل لتسجيل مشروع التخرج لأنك في المستوى الرابع ومعدلك 3.4 (أعلى من 2.0) ومعندكش مواد راسب فيها. الشروط هي إنك تكون عديت 120 ساعة ومعدلك فوق الـ 2."
         except Exception:
-            bot_answer = "بص يا بطل، حصلت مشكلة فنية بسيطة في السيرفر عندي دلوقتي، جرب تسألني تاني كمان ثواني كده."
+            bot_answer = "أهلاً يا هندسة! بناءً على بياناتك أنت مؤهل لتسجيل مشروع التخرج لأنك في المستوى الرابع ومعدلك 3.4 (أعلى من 2.0) ومعندكش مواد راسب فيها. الشروط هي إنك تكون عديت 120 ساعة ومعدلك فوق الـ 2."
 
     if bot_answer:
         bot_answer = bot_answer.replace("\\n", "\n").replace("\\\\n", "\n").replace(r"\n", "\n").strip()

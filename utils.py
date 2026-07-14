@@ -12,8 +12,7 @@ STUDENT_CHATS_HISTORY = {}
 # تحميل ملف اللائحة الـ JSON كـ خط دفاع بديل (Fallback) محلي
 REGULATION_DATA = []
 try:
-    # تأكدي أن ملف الـ JSON مرفوع بنفس الاسم في فولدر المشروع على السيرفر
-    with open("final_regulation_final_clean.json", "r", encoding="utf-8") as f:
+    with open("final_regulation_final_clean (3).json", "r", encoding="utf-8") as f:
         REGULATION_DATA = json.load(f)
 except Exception as e:
     print(f"Error loading local JSON regulation file: {str(e)}")
@@ -44,22 +43,15 @@ def get_embedding_groq(text: str):
 
 
 def search_local_json(question: str, top_k=3):
-    """
-    مسترجع محلي بسيط يبحث بالكلمات المفتاحية في ملف الـ JSON 
-    في حال عطل Pinecone السحابي تماماً لمنع توقف البوت.
-    """
     results = []
-    # تنظيف كلمات البحث
     words = [w for w in question.split() if len(w) > 2]
     
     for item in REGULATION_DATA:
         text_content = item.get("text", "")
-        # حساب عدد الكلمات المتطابقة ببساطة كـ fallback سريع
         score = sum(1 for word in words if word in text_content)
         if score > 0:
             results.append((score, text_content))
             
-    # ترتيب النتائج وأخذ الـ top_k
     results.sort(key=lambda x: x[0], reverse=True)
     return "\n".join([res[1] for res in results[:top_k]])
 
@@ -73,16 +65,14 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     
     context = ""
     
-    # 1. محاولة جلب سياق اللائحة عبر الـ Embedding والبحث في Pinecone
+    # 1. جلب السياق من Pinecone مع Fallback للملف المحلي
     try:
         pinecone_key = os.getenv("PINECONE_API_KEY")
         groq_key = os.getenv("GROQ_API_KEY")
         
         if pinecone_key and groq_key:
-            # تحويل سؤال الطالب لـ Vector حقيقي
             query_vector = get_embedding_groq(question)
             
-            # البحث في Pinecone بالـ Vector الحقيقي
             pc = Pinecone(api_key=pinecone_key)
             index = pc.Index("wanis-index")
             
@@ -96,16 +86,12 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
             if matches:
                 context = "\n".join([match['metadata']['text'] for match in matches if 'metadata' in match and 'text' in match['metadata']])
             
-        # إذا لم نجد أي سياق مسترجع من Pinecone، نلجأ فوراً للـ Fallback المحلي من الـ JSON
         if not context and REGULATION_DATA:
-            print("Pinecone returned empty results. Falling back to local JSON search...")
             context = search_local_json(question, top_k=3)
             
     except Exception as e:
-        print(f"Pinecone/Embedding Error: {str(e)}")
-        # في حالة حدوث أي Exception في Pinecone، نستخدم الـ Fallback المحلي ونمنع العطل
+        print(f"Pinecone Error: {str(e)}")
         if REGULATION_DATA:
-            print("Exception caught. Falling back to local JSON search...")
             context = search_local_json(question, top_k=3)
         else:
             context = "تعذر استخراج سياق اللائحة حالياً بسبب عطل في قاعدة البيانات."
@@ -117,9 +103,10 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     gpa = student_profile.get('gpa', 'غير متوفر')
     failed_courses = student_profile.get('failed_courses', 'لا يوجد')
     
+    # استخدمنا الـ f-string هنا بشكل سليم ومباشر مع المتغيرات المستخرجة فوق لمنع الـ KeyError
     system_instruction = f"""أنت "رفيق"، المساعد الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة. 
 
-أجب عن سؤال الطالب بناءً على "سياق اللائحة" (Context) المرفق و"ملف الطالب" (Student Profile) أدناه فقط.
+أجب عن سؤال الطالب بناءً على "سياق اللائحة" المرفق و"ملف الطالب" أدناه فقط.
 
 بيانات الطالب الحالية:
 - المستوى الدراسي: {level}
@@ -169,7 +156,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
             json={
                 "model": "google/gemma-2-9b-it:free",
                 "messages": messages,
-                "temperature": 0.2  # جعلناه 0.2 لضمان عدم الهلوسة والالتزام بالنص
+                "temperature": 0.2
             },
             timeout=10
         )
@@ -193,7 +180,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 json={
                     "model": "llama-3.1-8b-instant",
                     "messages": messages,
-                    "temperature": 0.2  # جعلناه 0.2 للالتزام التام بالتعليمات
+                    "temperature": 0.2
                 },
                 timeout=10
             )

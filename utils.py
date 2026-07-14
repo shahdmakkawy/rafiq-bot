@@ -65,7 +65,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     
     context = ""
     
-    # 1. جلب السياق من Pinecone مع Fallback للملف المحلي
+    # 1. جلب السياق من Pinecone بأمان تام مع Fallback للملف المحلي
     try:
         pinecone_key = os.getenv("PINECONE_API_KEY")
         groq_key = os.getenv("GROQ_API_KEY")
@@ -82,19 +82,46 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 include_metadata=True
             )
             
-            matches = search_results.get('matches', [])
-            if matches:
-                context = "\n".join([match['metadata']['text'] for match in matches if 'metadata' in match and 'text' in match['metadata']])
+            # قراءة الـ matches بأمان سواء كانت Object (SDK جديد) أو Dict (SDK قديم)
+            matches = []
+            if hasattr(search_results, 'matches'):
+                matches = search_results.matches
+            elif isinstance(search_results, dict) and 'matches' in search_results:
+                matches = search_results['matches']
             
+            # استخراج النصوص بأمان منعاً لأي AttributeError
+            context_list = []
+            if matches:
+                for match in matches:
+                    metadata = {}
+                    if hasattr(match, 'metadata') and match.metadata:
+                        metadata = match.metadata
+                    elif isinstance(match, dict) and 'metadata' in match:
+                        metadata = match['metadata']
+                    
+                    # جلب النص من الميتاداتا
+                    text = ""
+                    if isinstance(metadata, dict):
+                        text = metadata.get('text', '')
+                    elif hasattr(metadata, 'text'):
+                        text = metadata.text
+                        
+                    if text:
+                        context_list.append(text)
+                
+                context = "\n".join(context_list)
+            
+        # لو النتيجة طلعت فاضية، نروح للـ JSON فوراً
         if not context and REGULATION_DATA:
             context = search_local_json(question, top_k=3)
             
     except Exception as e:
-        print(f"Pinecone Error: {str(e)}")
+        print(f"Safe Pinecone Catch: {str(e)}")
+        # لو حصل أي كراش في خطوة بينكون، الـ JSON المحلي ينقذ الموقف فوراً
         if REGULATION_DATA:
             context = search_local_json(question, top_k=3)
         else:
-            context = "تعذر استخراج سياق اللائحة حالياً بسبب عطل في قاعدة البيانات."
+            context = "تعذر استخراج سياق اللائحة حالياً."
 
     # 2. بناء الـ System Message وتخصيص بيانات الطالب الدراسية
     level = student_profile.get('level', 'غير محدد')
@@ -103,10 +130,9 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     gpa = student_profile.get('gpa', 'غير متوفر')
     failed_courses = student_profile.get('failed_courses', 'لا يوجد')
     
-    # استخدمنا الـ f-string هنا بشكل سليم ومباشر مع المتغيرات المستخرجة فوق لمنع الـ KeyError
     system_instruction = f"""أنت "رفيق"، المساعد الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة. 
 
-أجب عن سؤال الطالب بناءً على "سياق اللائحة" المرفق و"ملف الطالب" أدناه فقط.
+أجب عن سؤال الطالب بناءً على "سياق اللائحة" (Context) المرفق و"ملف الطالب" أدناه فقط.
 
 بيانات الطالب الحالية:
 - المستوى الدراسي: {level}

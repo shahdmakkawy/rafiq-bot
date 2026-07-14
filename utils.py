@@ -19,7 +19,7 @@ EMERGENCY_REGULATION_TEXT = """
 
 REGULATION_DATA = []
 try:
-    with open("final_regulation_final_clean (3).json", "r", encoding="utf-8") as f:
+    with open("final_regulation_final_clean.json", "r", encoding="utf-8") as f:
         REGULATION_DATA = json.load(f)
 except Exception as e:
     print(f"Error loading local JSON: {str(e)}")

@@ -1,5 +1,4 @@
 import os
-#from pinecone import Cone  # سيتم استدعاؤها عبر الكلاس الجديد تلقائياً من المكتبة
 from pinecone import Pinecone
 import requests
 import json
@@ -9,6 +8,16 @@ load_dotenv()
 
 # 🧠 ذاكرة مؤقتة لحفظ تاريخ المحادثات لكل طالب
 STUDENT_CHATS_HISTORY = {}
+
+# تحميل ملف اللائحة الـ JSON كـ خط دفاع بديل (Fallback) محلي
+REGULATION_DATA = []
+try:
+    # تأكدي أن ملف الـ JSON مرفوع بنفس الاسم في فولدر المشروع على السيرفر
+    with open("final_regulation_final_clean (3).json", "r", encoding="utf-8") as f:
+        REGULATION_DATA = json.load(f)
+except Exception as e:
+    print(f"Error loading local JSON regulation file: {str(e)}")
+
 
 def get_embedding_groq(text: str):
     try:
@@ -33,6 +42,28 @@ def get_embedding_groq(text: str):
         print(f"Embedding Error: {str(e)}")
         return [0] * 1024
 
+
+def search_local_json(question: str, top_k=3):
+    """
+    مسترجع محلي بسيط يبحث بالكلمات المفتاحية في ملف الـ JSON 
+    في حال عطل Pinecone السحابي تماماً لمنع توقف البوت.
+    """
+    results = []
+    # تنظيف كلمات البحث
+    words = [w for w in question.split() if len(w) > 2]
+    
+    for item in REGULATION_DATA:
+        text_content = item.get("text", "")
+        # حساب عدد الكلمات المتطابقة ببساطة كـ fallback سريع
+        score = sum(1 for word in words if word in text_content)
+        if score > 0:
+            results.append((score, text_content))
+            
+    # ترتيب النتائج وأخذ الـ top_k
+    results.sort(key=lambda x: x[0], reverse=True)
+    return "\n".join([res[1] for res in results[:top_k]])
+
+
 def ask_wanis(question: str, student_id: str = "default_student", student_profile: dict = None):
     if student_id not in STUDENT_CHATS_HISTORY:
         STUDENT_CHATS_HISTORY[student_id] = []
@@ -42,21 +73,14 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     
     context = ""
     
-    # 1. جلب سياق اللائحة عبر الـ Embedding والبحث في Pinecone
+    # 1. محاولة جلب سياق اللائحة عبر الـ Embedding والبحث في Pinecone
     try:
         pinecone_key = os.getenv("PINECONE_API_KEY")
         groq_key = os.getenv("GROQ_API_KEY")
         
         if pinecone_key and groq_key:
             # تحويل سؤال الطالب لـ Vector حقيقي
-            embed_url = "https://api.groq.com/openai/v1/embeddings"
-            embed_response = requests.post(
-                url=embed_url,
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={"model": "nomic-embed-text-v1.5", "input": question},
-                timeout=5
-            )
-            query_vector = embed_response.json()['data'][0]['embedding']
+            query_vector = get_embedding_groq(question)
             
             # البحث في Pinecone بالـ Vector الحقيقي
             pc = Pinecone(api_key=pinecone_key)
@@ -67,12 +91,24 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 top_k=3,
                 include_metadata=True
             )
-            context = "\n".join([match['metadata']['text'] for match in search_results['matches'] if 'metadata' in match and 'text' in match['metadata']])
-        else:
-            context = "بيئة العمل تفتقد لمفاتيح الاتصال."
+            
+            matches = search_results.get('matches', [])
+            if matches:
+                context = "\n".join([match['metadata']['text'] for match in matches if 'metadata' in match and 'text' in match['metadata']])
+            
+        # إذا لم نجد أي سياق مسترجع من Pinecone، نلجأ فوراً للـ Fallback المحلي من الـ JSON
+        if not context and REGULATION_DATA:
+            print("Pinecone returned empty results. Falling back to local JSON search...")
+            context = search_local_json(question, top_k=3)
+            
     except Exception as e:
         print(f"Pinecone/Embedding Error: {str(e)}")
-        context = "تعذر استخراج سياق اللائحة حالياً بسبب عطل في قاعدة البيانات."
+        # في حالة حدوث أي Exception في Pinecone، نستخدم الـ Fallback المحلي ونمنع العطل
+        if REGULATION_DATA:
+            print("Exception caught. Falling back to local JSON search...")
+            context = search_local_json(question, top_k=3)
+        else:
+            context = "تعذر استخراج سياق اللائحة حالياً بسبب عطل في قاعدة البيانات."
 
     # 2. بناء الـ System Message وتخصيص بيانات الطالب الدراسية
     level = student_profile.get('level', 'غير محدد')
@@ -81,26 +117,26 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
     gpa = student_profile.get('gpa', 'غير متوفر')
     failed_courses = student_profile.get('failed_courses', 'لا يوجد')
     
-    system_instruction = """
-أنت "رفيق"، المساعد الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة. 
+    system_instruction = f"""أنت "رفيق"، المساعد الأكاديمي الذكي لطلاب برنامج الذكاء الاصطناعي بجامعة المنصورة. 
 
-أجب عن سؤال الطالب بناءً على "سياق اللائحة" (Context) المرفق و"ملف الطالب" (Student Profile) فقط.
+أجب عن سؤال الطالب بناءً على "سياق اللائحة" (Context) المرفق و"ملف الطالب" (Student Profile) أدناه فقط.
 
 بيانات الطالب الحالية:
-- المستوى الدراسي: {student_profile.level}
-- القسم/البرنامج: {student_profile.department}
-- المعدل التراكمي (GPA): {student_profile.gpa}
-- المواد الراسب فيها: {student_profile.failed_courses}
+- المستوى الدراسي: {level}
+- القسم/البرنامج: {dept}
+- المعدل التراكمي (GPA): {gpa}
+- المواد الراسب فيها: {failed_courses}
 
 سياق اللائحة المسترجع:
 {context}
 
 تعليمات صياغة الرد (هامة جداً):
 1. صغ إجابتك بالعامية المصرية الودية والواضحة مباشرة (مثال: "أهلاً يا هندسة، بناءً على اللائحة وبياناتك...").
-2. ممنوع تماماً كتابة رموز برمجية أو علامات غريبة مثل \n أو n1 أو n2 في نص الإجابة. اكتب الشروط في نقاط واضحة ومقروءة تفهمها العين.
+2. ممنوع تماماً كتابة رموز برمجية أو علامات غريبة مثل \\n أو n1 أو n2 في نص الإجابة. اكتب الشروط في نقاط واضحة ومقروءة تفهمها العين.
 3. قارن بيانات الطالب مباشرة بشروط اللائحة المرفقة، وقل له بثقة هل هو مؤهل لتسجيل مشروع التخرج أم لا (مثال: طالما مسجل 120 ساعة ومعدلك فوق 2، إذن أنت مؤهل تماماً!).
 4. إذا لم تجد شروطاً واضحة تناسب السؤال في السياق المرفق، قل له مباشرة وبدون تردد: "النقطة دي بالتفصيل مش واضحة في المواد اللي معايا يا بطل، عشان مصلحتك اتأكد من شؤون الطلاب". وممنوع تأليف أي أرقام من دماغك.
 """
+
     messages = [{"role": "system", "content": system_instruction}]
     for msg in history[-4:]:  
         messages.append(msg)
@@ -133,7 +169,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
             json={
                 "model": "google/gemma-2-9b-it:free",
                 "messages": messages,
-                "temperature": 0.4
+                "temperature": 0.2  # جعلناه 0.2 لضمان عدم الهلوسة والالتزام بالنص
             },
             timeout=10
         )
@@ -157,7 +193,7 @@ def ask_wanis(question: str, student_id: str = "default_student", student_profil
                 json={
                     "model": "llama-3.1-8b-instant",
                     "messages": messages,
-                    "temperature": 0.55
+                    "temperature": 0.2  # جعلناه 0.2 للالتزام التام بالتعليمات
                 },
                 timeout=10
             )

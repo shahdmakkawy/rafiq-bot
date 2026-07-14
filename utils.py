@@ -12,7 +12,7 @@ STUDENT_CHATS_HISTORY = {}
 # تحميل ملف اللائحة الـ JSON كـ خط دفاع بديل (Fallback) محلي
 REGULATION_DATA = []
 try:
-    with open("final_regulation_final_clean (3).json", "r", encoding="utf-8") as f:
+    with open("final_regulation_final_clean.json", "r", encoding="utf-8") as f:
         REGULATION_DATA = json.load(f)
 except Exception as e:
     print(f"Error loading local JSON regulation file: {str(e)}")
